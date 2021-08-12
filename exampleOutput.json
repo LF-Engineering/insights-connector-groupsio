@@ -7,30 +7,6 @@
   "Events": [
     {
       "Message": {
-        "Body": "Hi,In Hyperledger Fabric after receiving endorser responses how the client se=nd it to=C2=A0 orderer? Please give me a detailed flow to understand how th=e client request is reached to orderer?\n",
-        "CreatedAt": "2020-01-08T07:54:13.000Z",
-        "CreatedAtInTZ": "2020-01-07T23:54:13.000Z",
-        "CreatedTZ": -8,
-        "DataSourceId": "groupsio",
-        "InternalId": "<zbnO.1578470053620419388.DYy7@lists.hyperledger.org>",
-        "MailingList": {
-          "InternalId": "16360",
-          "Name": "hyperledger+fabric",
-          "URL": "https://groups.io/g/hyperledger+fabric"
-        },
-        "MessageId": "7977b3beb52590fcc2970179f170595a6b51daec",
-        "Recipients": [],
-        "Sender": {
-          "DataSourceId": "groupsio",
-          "Email": "amalcs2311@gmail.com",
-          "Id": "af5317b462f30dd8414d8b201e615442af7660b5",
-          "Name": "amalcs2311"
-        },
-        "Subject": "Regarding Client Orderer communication"
-      }
-    },
-    {
-      "Message": {
         "Body": "Try with the \"lifecycle\" option please\n\npeer lifecycle chaincode queryinstalledpeer lifecycle chaincode querycommitted -C myc\n\nand\n\"peer lifecycle chaincode --help\" for all the available subcommands.\nMurali\nOn Thu, Jan 2, 2020 at 11:08 AM Ross Tang <tangross@dashslab.com> wrote:\n> I am trying out the Fabric V2 Beta.>> I can successfully commit an approved chaincode, under the new chaincode> lifecycle.>> Then, I try to run legacy command `peer chaincode list =E2=80=94installe=d` or `peer> chaincode list =E2=80=94instantiated`. Nothing returns.>> The new command `peer lifecycle chaincode querycommitted` returns> normally.>>> Also, I try to send transaction via new Contract api, with> fabric-contract-api v1.4.4. It returns below error.>> { Error: make sure the chaincode micc has been successfully defined on> channel mychannel and try again: chaincode definition for =E2=80=98micc'= exists,> but chaincode is not installed=E2=80=A6.>>> In the documentation, it invoke transaction via low level api.>>> QUESTION:> Can new chaincode lifecycle and new Contract api working together? It> seems that the new Contract api can only recognise chaincode deployed in> legacy way.>> Is my understanding correct?>=20>>\n--=20Thanks,Murali\"Practice is a means of inviting the perfection desired.\" - Martha Graham=E2=80=9CWe ran and ran. We were exhausted, but we kept running.=E2=80=9D =- Homare Sawaafter winning 2011 Women's Soccer world cup\n",
         "CreatedAt": "2020-01-03T13:20:46.000Z",
         "CreatedAtInTZ": "2020-01-03T08:20:46.000Z",
@@ -95,32 +71,6 @@
     },
     {
       "Message": {
-        "Body": "The easiest way to do is to use two private data collection, first is A-Bcollection and second is B-C collection. This way, all the three orgs canjoin the same channel or different channels with the private collectionswithout concerning about the orderer nodes at all.\nWith the private collection, each data collection will only be disseminate=dp2p to only authorized orgs and the private data will not be passed throug=hany orderer node like the way the public data transactions are performed.\nOn Thu, 9 Jan 2020, 22:44 Aleksandr Kochetkov, <aleksandr.kochetkov@altoros.com> wrote:\n> 3 parties, each have a peer and orderer:>> peer.a, orderer.a, peer.b, orederer.b, peer.c, orderer.c>> Orderers operating in Raft mode.>> 2 channels exists A-B, B-C.>> Goal is to isolate data flow, so organization C don=E2=80=99t have any a=ccess to> channel A-B, same for A and channel B-C.>> Is it possible to configure orderers in such manner, that orderer.c will> not receive and store blocks from channel A-B, and respectively orderer.=a> from B-C?>>=20>\n",
-        "CreatedAt": "2020-01-11T09:37:28.000Z",
-        "CreatedAtInTZ": "2020-01-11T16:37:28.000Z",
-        "CreatedTZ": 7,
-        "DataSourceId": "groupsio",
-        "InternalId": "<CAC7p2or=KmNDSZ2AY6hLQ9Qx+42poUjuwJJp70AVby-qmxfiUQ@mail.gmail.com>",
-        "MailingList": {
-          "InternalId": "16360",
-          "Name": "hyperledger+fabric",
-          "URL": "https://groups.io/g/hyperledger+fabric"
-        },
-        "MessageId": "4ab416d48b9fc71ae9fe830fe749559f8c5419fd",
-        "ParentID": "f0ebcc55534bf6b115c8a21fab712401436a4621",
-        "ParentInternalID": "<Pgai.1578584641708764894.PF1A@lists.hyperledger.org>",
-        "Recipients": [],
-        "Sender": {
-          "DataSourceId": "groupsio",
-          "Email": "mr.thummavet@gmail.com",
-          "Id": "0c4cbfc44df72e1ab89a2d4bc2366d41c7000f67",
-          "Name": "Mr.Phuwanai Thummavet"
-        },
-        "Subject": "Re: [Hyperledger Fabric] How to achieve channels isolation on RAFT orderers?"
-      }
-    },
-    {
-      "Message": {
         "Body": "Hello Team,\nI have an urgent requirement to fulfill and am trying to update the batchsize for my network\nAm following the tutorial to \"Add org3 in to network\" that lists out thesteps to updated a channel configuration.While running the final step to update\" peer channel update -f batch_update_in_envelope.pb -c $CHANNEL_NAME -oorderer.example.com:7050 --tls --cafile $ORDERER_CA\"\nit fails with below error\n2020-01-11 19:41:29.563 UTC [channelCmd] InitCmdFactory -> INFO 001Endorser and orderer connections initializedError: got unexpected status: BAD_REQUEST -- error applying config updateto existing channel 'mychannel': error authorizing update: error validatingDeltaSet: policy for [Value]  /Channel/Orderer/BatchSize not satisfied:implicit policy evaluation failed - 0 sub-policies were satisfied, but thispolicy requires 1 of the 'Admins' sub-policies to be satisfied\n\nPlease help me out if possible urgently since I have to deliver this inanother 10-12 hours.\n",
         "CreatedAt": "2020-01-11T19:49:57.000Z",
         "CreatedAtInTZ": "2020-01-12T01:19:57.000Z",
@@ -181,54 +131,6 @@
           "Name": "Mr.Phuwanai Thummavet"
         },
         "Subject": "Re: [Hyperledger Fabric] How to unpack a packaged chaincode"
-      }
-    },
-    {
-      "Message": {
-        "Body": "CgoKCgoKCgoKCgoKLS0tLS0tLS0gRm9yd2FyZGluZyBtZXNzYWdlcyAtLS0tLS0tLQpGcm9tOiAibWVuZyIgPHFzbWVuZ0AxMjYuY29tPgpEYXRlOiAyMDIwLTAxLTEzIDExOjA4OjM0ClRvOiAiTmlraGlsIEUgR3VwdGEiIDxuZWd1cHRhQHVzLmlibS5jb20+LHJvYmVydEBpeWFzZWMuaW8sbmx6YW51dGltQHlhaG9vLmNvbQpTdWJqZWN0OiBSZTpSZTogcmXvvJpbSHlwZXJsZWRnZXIgRmFicmljXSBpZGVudGl0eSBhdXRoZW50aWNhdGlvbgoKSGksCiAgICAgVGhhbmsgeW91IGFsbCBmb3IgeW91ciByZXBseS4KICAgICBBYm91dCB0aGUgQ0lELCB0aGUgY2VydGlmaWNhdGUgaXMgaW5pdGlhbGl6ZWQgaW50byBhbiBvYmplY3QgYW5kIHRoZSBpbmZvcm1hdGlvbiBsaWtlIGlkL21zcElEIGlzIG9idGFpbmVkIGJ5IENJRCBmdW5jdGlvbi4gVGhlIGF1dGhlbnRpY2l0eSBhYm91dCB0aGUgSUQgaXMgbm90IGNoZWNrZWQgYXQgYWxsLiBDSUQgdGhpbmsgaXQgaXMgdHJ1ZSBiZWNhdXNlIHRoZSBlbmRvcnNpbmcgcGVlciBoYXMgYWxyZWFkeSBjaGVja2VkLgogICAgQWJvdXQgU0RLIG1haW50YWluaW5nIGEgY3JlZGVudGlhbCB3YWxsZXQgdGhhdCBob2xkcyBlbmQgdXNlcidzIEhMRiBjcmVkZW50aWFscywgSSBkaWRub3QgZmluZCBhbnkgbWF0ZXJpYWwgb24gaXQuIEkgZ3Vlc3MgdGhlIERBcHAgdXNlcyB0aGUgY3JlZG50aWFscyBpbiB0aGUgd2FsbGV0IHRvIGNoZWNrIHRoZSBJRCBvZiBlbmR1c2Vycz8gSXMgdGhlIHRyYW5zYWN0aW9uIHByb3Bvc2FsIHRoZW4gc2lnbmVkICBieSB0aGUgREFwcCBhbmQgc3VibWl0dGVkIHRvIEZhYnJpYz8gIElmIHNvLCB3ZSBtdXN0IHRydXN0IHRoZSBEQXBwLiAKICBBYm91dCB0aGUgcmVzdGZ1bCBBUEksIGFuIGVuZHVzZXIgbXVzdCBzZW5kIGEgIHByb3Bvc2FsIHRvIGEgc2VydmVyLCB3aGF0IGlzIHRoZSBzZXJ2ZXIgdGhhdCBoYW5kbGVzIHRoZSBwcm9wb3NhbCBhbmQgd2hlcmUgdGhlIHNlcnZlciBpcyBydW5uaW5nPyAKICBUaGFuayB5b3UuCiAgIEJlc3QgcmVnYXJkcywKcXNtZW5nCgoKCgoKCgoKCgoKCkF0IDIwMTktMTItMDYgMDA6MTk6MjcsICJOaWtoaWwgRSBHdXB0YSIgPG5lZ3VwdGFAdXMuaWJtLmNvbT4gd3JvdGU6CgpJIHdvdWxkIGxvb2sgdXAgYXR0cmlidXRlIGJhc2VkIGFjY2VzcyBjb250cm9sOiBodHRwczovL2ZhYnJpYy1zaGltLmdpdGh1Yi5pby9tYXN0ZXIvZmFicmljLXNoaW0uQ2xpZW50SWRlbnRpdHkuaHRtbCNhc3NlcnRBdHRyaWJ1dGVWYWx1ZQoKCgoKCi0tLS0tZmFicmljQGxpc3RzLmh5cGVybGVkZ2VyLm9yZyB3cm90ZTogLS0tLS0KVG86IFJvYmVydCBCcm9lY2tlbG1hbm4gPHJvYmVydEBpeWFzZWMuaW8+CkZyb206ICJxcyBtZW5nIgpTZW50IGJ5OiBmYWJyaWNAbGlzdHMuaHlwZXJsZWRnZXIub3JnCkRhdGU6IDEyLzA0LzIwMTkgMDk6MjFQTQpDYzogTmljaG9sYXMgWmFudXRpbSA8bmx6YW51dGltQHlhaG9vLmNvbT4sICJmYWJyaWNAbGlzdHMuaHlwZXJsZWRnZXIub3JnIiA8ZmFicmljQGxpc3RzLmh5cGVybGVkZ2VyLm9yZz4KU3ViamVjdDogW0VYVEVSTkFMXSDlm57lpI3vvJpbSHlwZXJsZWRnZXIgRmFicmljXSBpZGVudGl0eSBhdXRoZW50aWNhdGlvbgoKCmhlbGxvIFJvYmVydCwKbW9yZSBzcGVjaWZpY2x5LEkgd2FudCB0byBhdXRoZW50aWNhdGUgcmVxdWVzdG9yIGlkIGluIGNoYWluY29kZS4gdGhpcyBwcm92aWRlIG1vcmUgZnJlZWRvbSBmb3IgZW5kdXNlci4gCnRoYW5rIHlvdS4gCnJlZ2FyZHMuIApxc21lbmcKCgoKCgotLS0tLS0tLSDljp/lp4vpgq7ku7YgLS0tLS0tLS0K5Y+R5Lu25Lq677yaIFJvYmVydCBCcm9lY2tlbG1hbm4gPHJvYmVydEBpeWFzZWMuaW8+CuaXpeacn++8miAyMDE55bm0MTLmnIg05pel5ZGo5LiJIOS4reWNiDEyOjMyCuaUtuS7tuS6uu+8miBxcyBtZW5nIDxxc21lbmdAMTI2LmNvbT4K5oqE6YCB77yaIE5pY2hvbGFzIFphbnV0aW0gPG5semFudXRpbUB5YWhvby5jb20+LCBmYWJyaWNAbGlzdHMuaHlwZXJsZWRnZXIub3JnCuS4uyDpopjvvJogUmU6IFtIeXBlcmxlZGdlciBGYWJyaWNdIGlkZW50aXR5IGF1dGhlbnRpY2F0aW9uCgpIZWxsby4gCgoKSSBoYWQgYSBzaW1pbGFyIHNpdHVhdGlvbiBlYXJsaWVyIHRoaXMgeWVhci4KCgpUaGUgRmFicmljIFNES3MgY29udGFpbiBzdXBwb3J0IGZvciBtYWludGFpbmluZyBhIGNyZWRlbnRpYWwgd2FsbGV0IHRoYXQgaG9sZHMgZW5kIHVzZXIncyBITEYgY3JlZGVudGlhbHMuCgoKSWYgeW91IGhhdmUgYW4gYXJjaGl0ZWN0dXJlIHNpbWlsYXIgdG86CgoKTW9iaWxlIEFwcC0+IFJFU1QgQVBJLT5ITEYgUGVlciAKCgpUaGVuLCB0aGUgUkVTVCBBUEkgbGF5ZXIgY2FuIGJlIHVzZWQgdG8gdHJhbnNsYXRlIGZyb20gYSBzZWN1cml0eSB0b2tlbiBlbWJlZGRlZCBpbiBBUEkgcmVxdWVzdHMgdG8gY3JlZGVudGlhbHMgdGhhdCB0aGUgYmxvY2tjaGFpbiBuZXR3b3JrIHdpbGwgdW5kZXJzdGFuZCAoaWUsIFBLSSBhbiBYNTA5IHByaXZhdGUgcHVibGljIGtleSBwYWlycykuCgoKU2VlIFsxXSBmb3IgYW4gZXhhbXBsZS4gCgoKT3VyIHJlcXVpcmVtZW50cyBldmVudHVhbGx5IHNoaWZ0ZWQgdG8gYW4gImFwcGxpY2F0aW9uIiBpZCBiZWluZyByZWNvcmRlZCBpbiB0aGUgYmxvY2tjaGFpbi4gU28sIHdlIGp1c3QgaXNzdWVkIGEgInN5c3RlbSBpZGVudGl0eSIgdGhhdCB0aGUgUkVTVCBBUEkgbGF5ZXIncyBTREsgdXNlZCBmb3IgYWxsIHBlZXIgaW50ZXJhY3Rpb24uIFNvLCB0aGF0IGVuZGVkIHVwIGJlaW5nIG11Y2ggc2ltcGxlci4KCgpJIGhvbmVzdGx5IGRvbid0IGxpa2UgdGhlIHNvbHV0aW9uIHdoZXJlIHRoZSBzZXJ2ZXItc2lkZSBhcHAgaGFzIHRvIG1haW50YWluIGEgY3JlZGVudGlhbCB3YWxsZXQgdGhhdCBjb250YWlucyBhbGwgcmVnaXN0ZXJlZCB1c2VycyBITEYgY3JlZGVudGlhbHMsIGJ1dCB0aGF0IGRvZXMgc2VlbSBjbGVhbmVyIHRoYW4gaGF2aW5nIGV2ZXJ5IG1vYmlsZSBhcHAgaW5zdGFuY2UgaXNzdWVkIGEgc2V0IG9mIEhMRiBjcmVkZW50aWFscyBhbmQgZGlyZWN0bHkgY29tbXVuaWNhdGluZyB3aXRoIHRoZSBibG9ja2NoYWluIG5ldHdvcmsuIE5vdGUsIEkgaGF2ZW4ndCBzZWVuIGFueW9uZSBvciBhbnl0aGluZyBwaXRjaGluZyB0aGF0IGFyY2hpdGVjdHVyZSwgYnV0IGl0IHdvdWxkIHByb2JhYmx5IGJlIHRoZSBvbmx5IGFsdGVybmF0aXZlLgoKCkZvciBhdXRoZW50aWNhdGlvbiBvZiBlbmQgdXNlcnMgb24gdGhlIG1vYmlsZSwgYXBwIEknZCByZWNvbW1lbmQgdXNpbmcgT3BlbklkIENvbm5lY3QncyBBdXRob3JpemF0aW9uIENvZGUgR3JhbnQgd2l0aCBhIFB1YmxpYyBDbGllbnQuIFVzZSBvbmUgb2YgdGhlIG51bWVyb3VzIElkYWFTIChJZGVudGl0eSBhcyBhIFNlcnZpY2UpIFByb3ZpZGVycyBhdmFpbGFibGUgdG9kYXkuICBJZiBPSURDIGlzIHVzZWQgaW4gdGhpcyBtYW5uZXIsIHlvdSBhbHNvIGdldCBhbiBPQXV0aDIgYWNjZXNzIHRva2VuIHRoYXQgY2FuIGJlIGNhY2hlZCBpbiB0aGUgbW9iaWxlIGFwcCAoYW5kIHJlZnJlc2hlZCBhcyBuZWVkZWQpIGFuZCBpbmNsdWRlZCB3aXRoIEFQSSBjYWxscyAoYXV0aG9yaXphdGlvbiBoZWFkZXIpIHRvIHRoZSBSRVNUIEFQSSBsYXllci4gQW4gQVBJIEdhdGV3YXkgY2FuIGJlIHVzZWQgdG8gaGFuZGxlIGF1dGhlbnRpY2F0aW9uLCBhdXRob3JpemF0aW9uLCByZXF1ZXN0IHZhbGlkYXRpb24sIGFuZCBvdGhlciB0eXBpY2FsIGNvbmNlcm5zIG9mIEFQSSBTZWN1cml0eS4gQWxsIHRoZSBtYWpvciBjbG91ZCBob3N0aW5nIHBsYXRmb3JtcyBvZmZlciBhbiBBUEkgR2F0ZXdheSBzb2x1dGlvbiB0aGF0IHdvdWxkIGRvIHRoaXMgb3V0LW9mLXRoZS1ib3gsIHRoZSBwcmV2aW91cyBwb3N0ZXIgbWVudGlvbmVkIEtvbmcsIEFwaWdlZSBpcyBhbm90aGVyLiBUaGVyZSBhcmUgYSBidW5jaCBvZiBvdGhlcnMuIAoKClJlZmVyZW5jZToKClsxXSBodHRwczovL2dpdGh1Yi5jb20vaHlwZXJsZWRnZXIvZmFicmljLXNhbXBsZXMvdHJlZS9yZWxlYXNlLTEuNC9iYWxhbmNlLXRyYW5zZmVyCgoKUkNCSgoKCk9uIFR1ZSwgRGVjIDMsIDIwMTkgYXQgNjoyNCBQTSBxcyBtZW5nIDxxc21lbmdAMTI2LmNvbT4gd3JvdGU6CgoKCmhpIE5pY2hvbGFzLAogdGhlIGlkZW50aXR5IGJlIGF1dGhlbnRvY2F0ZWQgYnkgZmFicmljLiBpZiB0aGUga29uZyBydW5zIG91dHNpZGUgdGhlIGZhYnJpYywgaXRzIHJlc3VsdCBvZiBJRCBhdXRoZW50aWNhdGUgaXMgbm90IGFjY2VwdGVkIGJ5IGZhYnJpYy4KICBJIHdhbnQgIHRvIGF1dGhlbmF0ZSB0aGUgcmVxdWVzdG9yIGluIHRoZSBmYWJyaWMuCnRoYW5rIHlvdS4KYmVzdCByZWdhcmRzLiAKcXNtZW5nCgoKCgoKLS0tLS0tLS0g5Y6f5aeL6YKu5Lu2IC0tLS0tLS0tCuWPkeS7tuS6uu+8miBOaWNob2xhcyBaYW51dGltIDxubHphbnV0aW1AeWFob28uY29tPgrml6XmnJ/vvJogMjAxOeW5tDEy5pyIM+aXpeWRqOS6jCDmmZrkuIo5OjMxCuaUtuS7tuS6uu+8miBmYWJyaWNAbGlzdHMuaHlwZXJsZWRnZXIub3JnLCBxcyBtZW5nIDxxc21lbmdAMTI2LmNvbT4K5Li7IOmimO+8miBSZTogW0h5cGVybGVkZ2VyIEZhYnJpY10gaWRlbnRpdHkgYXV0aGVudGljYXRpb24KCllvdSBjYW4gdXNlIEtvbmcgU2VydmljZSBtYW5hZ2VyIHdpdGggSldUIG9yIGFueSBvdGhlciBmb3JtIG9mIGF1dGhlbnRpY2F0aW9uIHRvIGFjY2VzcyB0aGUgc2VydmljZXMgdGhhdCBzdWJtaXQgdHJhbnNhY3Rpb25zIHRvIHRoZSBGYWJyaWMgbmV0d29yay4gSW4gdGhpcyBjYXNlLCB0aGUgdXNlciBjZXJ0aWZpY2F0ZSBtdXN0IGJlIHByZXNlbnQgd2l0aCB0aGUgc2VydmljZXMKCgpFbSB0ZXLDp2EtZmVpcmEsIDMgZGUgZGV6ZW1icm8gZGUgMjAxOSAxMDowODo0NCBCUlQsIHFzIG1lbmcgPHFzbWVuZ0AxMjYuY29tPiBlc2NyZXZldToKCgoKCkhpIGV4cGVydHMsIAogICAgICBJbiB0aGUgY3VycmVudCBmYWJyaWMgZGVzaWduLCB0aGUgY2xpZW50IGFwcCBpcyB0aGUgdXNlIG9mIEZhYnJpYy4gUnVubmluZyBhIGNsaWVudCBhcHAgaXMgYSBoZWF2eSBjb3N0ICBmb3IgYSBtb2JpbGVwaG9uZSB1c2VyLiBXZSBkZXNpZ24gYSBwYXltZW50IHN5c3RlbSwgd2hlcmUgYSB1c2VyIGNhbiBzaWduIGEgcGF5bWVudCByZXF1ZXN0IHdpdGggaGlzL2hlciBwcml2YXRlIGtleSwgc3VibWl0IGl0IHRvIGEgY2xpZW50IGFwcCBhbmQgdGhlbiB0byBGYWJyaWMuICAKQSBwcm9ibGVtIGV4aXN0cyB0aGF0IGhvdyB0aGUgaWRlbnRpdHkgb2YgdGhlIHVzZXIgb3IgcmVxdWVzdG9yIGNhbiBiZSBhdXRoZW50aWNhdGVkPyAgQ2FuIGFueW9uZSBnaXZlIG1lIHNvbWUgc3VnZ2VzdGlvbnM/CiBUaGFuayB5b3UuCiBCZXN0IHJlZ2FyZHMsCnFzbWVuZwoKCgoKIAoKCgoKCi0tCgpSb2JlcnQgQy4gQnJvZWNrZWxtYW5uIEpyIHwgTWFuYWdpbmcgRGlyZWN0b3IgfCAgSXlhU2VjCgpNZWRpdW0uY29tIExpbmtlZEluIFR3aXR0ZXIgUGVyc29uYWwgQmxvZwptOiArMSAzMTQtNDk0LTMzOTggKFNNUyBvciBXaGF0c0FwcCkgfCBmYXg6ICsxICg4NjYpIDQ4NC0xNjM0CmVtYWlsOiByb2JlcnRAaXlhc2VjLmlvIHwgc2l0ZTogaXlhc2VjLmlvCgptYWlsOiAxOTIxNSBTRSAzNHRoIFN0IFN0ZSAxMDYtNDA3IENhbWFzIFdBIDk4NjA3LTg4MzAKCgoKCgoKCgoKCiA=\n",
-        "CreatedAt": "2020-01-13T03:12:25.000Z",
-        "CreatedAtInTZ": "2020-01-13T11:12:25.000Z",
-        "CreatedTZ": 8,
-        "DataSourceId": "groupsio",
-        "InternalId": "<5b13a9eb.5ce1.16f9ce361ee.Coremail.qsmeng@126.com>",
-        "MailingList": {
-          "InternalId": "16360",
-          "Name": "hyperledger+fabric",
-          "URL": "https://groups.io/g/hyperledger+fabric"
-        },
-        "MessageId": "fb9df5a687da5376805492b6cbddcf718aa8f5b2",
-        "Recipients": [],
-        "Sender": {
-          "DataSourceId": "groupsio",
-          "Email": "qsmeng@126.com",
-          "Id": "8fd16ab6f33781a378100d3345e10defd5e35108",
-          "Name": "qs meng"
-        },
-        "Subject": "=?UTF-8?B?Rnc6UmU6UmU6IHJl77yaW0h5cGVybGVkZ2VyIEZhYnJpY10gaWRlbnRpdHkgYXV0aGVudGljYXRpb24=?="
-      }
-    },
-    {
-      "Message": {
-        "Body": "It seems logical for orderer to maintain the ledger (at least the blockchai=n) for each registered channel? Can someone confirm this?If not, how does it validate?\nThanks\n",
-        "CreatedAt": "2020-01-07T03:28:27.000Z",
-        "CreatedAtInTZ": "2020-01-06T19:28:27.000Z",
-        "CreatedTZ": -8,
-        "DataSourceId": "groupsio",
-        "InternalId": "<sEKy.1578367707190922141.Eeha@lists.hyperledger.org>",
-        "MailingList": {
-          "InternalId": "16360",
-          "Name": "hyperledger+fabric",
-          "URL": "https://groups.io/g/hyperledger+fabric"
-        },
-        "MessageId": "e4ecf0078a274b896eeb4869f0745a0e44405822",
-        "Recipients": [],
-        "Sender": {
-          "DataSourceId": "groupsio",
-          "Email": "kevinx8888@gmail.com",
-          "Id": "990cec4c03844bbed8a545d963b8056dfc4fac0e",
-          "Name": "Kevin X"
-        },
-        "Subject": "Does Orderer maintain ledger for each channel? #fabric-orderer"
       }
     },
     {
