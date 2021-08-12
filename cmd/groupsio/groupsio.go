@@ -671,291 +671,257 @@ func (j *DSGroupsio) GetItemIdentitiesEx(ctx *shared.Ctx, doc interface{}) (iden
 
 // EnrichItem - return rich item from raw item for a given author type/role
 func (j *DSGroupsio) EnrichItem(ctx *shared.Ctx, item map[string]interface{}, role string, roleData interface{}) (rich map[string]interface{}, err error) {
-	rich = make(map[string]interface{})
-	shared.Printf("role=(%s,%=v) item=%s\n", role, roleData, shared.DumpKeys(item))
 	/*
-		msg, ok := item["data"].(map[string]interface{})
-		if !ok {
-			err = fmt.Errorf("missing data field in item %+v", shared.DumpKeys(item))
+		shared.Printf("raw: %s\n", shared.InterfaceToStringTrunc(item, shared.MaxPayloadPrintfLen, true))
+		shared.Printf("role=(%s,%+v) item=%s\n", role, roleData, shared.DumpKeys(item))
+		jsonBytes, err := jsoniter.Marshal(item)
+		if err != nil {
+			shared.Printf("Error: %+v\n", err)
 			return
 		}
-		msgDate, ok := Dig(msg, []string{GroupsioMessageDateField}, false, true)
-		// original raw format support
+		shared.Printf("%s\n", string(jsonBytes))
+	*/
+	rich = make(map[string]interface{})
+	msg, ok := item["data"].(map[string]interface{})
+	if !ok {
+		err = fmt.Errorf("missing data field in item %+v", shared.DumpKeys(item))
+		return
+	}
+	msgDate, ok := shared.Dig(msg, []string{shared.MessageDateField[GroupsIO]}, false, true)
+	// original raw format support
+	if !ok {
+		msgDate, ok = shared.Dig(msg, []string{"Date"}, false, true)
 		if !ok {
-			msgDate, ok = Dig(msg, []string{"Date"}, false, true)
-			if !ok {
-				Fatalf("cannot find date/Date field in %+v\n", DumpKeys(msg))
-				return
+			shared.Fatalf("cannot find date/Date field in %+v\n", shared.DumpKeys(msg))
+			return
+		}
+	}
+	var (
+		msgTz       float64
+		msgDateInTz time.Time
+	)
+	iMsgDateInTz, ok1 := shared.Dig(msg, []string{"date_in_tz"}, false, true)
+	if ok1 {
+		msgDateInTz, ok1 = iMsgDateInTz.(time.Time)
+	}
+	iMsgTz, ok2 := shared.Dig(msg, []string{"date_tz"}, false, true)
+	if ok2 {
+		msgTz, ok2 = iMsgTz.(float64)
+	}
+	if !ok1 || !ok2 {
+		sdt := fmt.Sprintf("%v", msgDate)
+		_, msgDateInTzN, msgTzN, ok := shared.ParseDateWithTz(sdt)
+		if ok {
+			if !ok1 {
+				msgDateInTz = msgDateInTzN
+			}
+			if !ok2 {
+				msgTz = msgTzN
 			}
 		}
-		var (
-			msgTz       float64
-			msgDateInTz time.Time
-		)
-		iMsgDateInTz, ok1 := Dig(msg, []string{"date_in_tz"}, false, true)
-		if ok1 {
-			msgDateInTz, ok1 = iMsgDateInTz.(time.Time)
+		if !ok && ctx.Debug > 0 {
+			shared.Printf("unable to determine tz for %v/%v/%v\n", msgDate, iMsgDateInTz, iMsgTz)
 		}
-		iMsgTz, ok2 := Dig(msg, []string{"date_tz"}, false, true)
-		if ok2 {
-			msgTz, ok2 = iMsgTz.(float64)
+	}
+	// copy RawFields
+	if role == "author" {
+		for _, field := range shared.RawFields {
+			v, _ := item[field]
+			rich[field] = v
 		}
-		if !ok1 || !ok2 {
-			sdt := fmt.Sprintf("%v", msgDate)
-			_, msgDateInTzN, msgTzN, ok := ParseDateWithTz(sdt)
+		getStr := func(i interface{}) (o string, ok bool) {
+			o, ok = i.(string)
 			if ok {
-				if !ok1 {
-					msgDateInTz = msgDateInTzN
-				}
-				if !ok2 {
-					msgTz = msgTzN
-				}
+				//Printf("getStr(%v) -> string:%s\n", i, o)
+				return
 			}
-			if !ok && ctx.Debug > 0 {
-				Printf("unable to determine tz for %v/%v/%v\n", msgDate, iMsgDateInTz, iMsgTz)
+			var a []interface{}
+			a, ok = i.([]interface{})
+			if !ok {
+				//Printf("getStr(%v) -> neither string nor []interface{}: %T\n", i, i)
+				return
 			}
+			if len(a) == 0 {
+				ok = false
+				//Printf("getStr(%v) -> empty array\n", i)
+				return
+			}
+			la := len(a)
+			o, ok = a[la-1].(string)
+			//Printf("getStr(%v) -> string[0]:%s\n", i, o)
+			return
 		}
-		// copy RawFields
-		if role == Author {
-			for _, field := range RawFields {
-				v, _ := item[field]
-				rich[field] = v
-			}
-			getStr := func(i interface{}) (o string, ok bool) {
-				o, ok = i.(string)
+		getStringValue := func(it map[string]interface{}, key string) (val string, ok bool) {
+			var i interface{}
+			i, ok = shared.Dig(it, []string{key}, false, true)
+			if ok {
+				val, ok = getStr(i)
 				if ok {
-					//Printf("getStr(%v) -> string:%s\n", i, o)
+					//Printf("getStringValue(%v) -> string:%s\n", key, val)
 					return
 				}
-				var a []interface{}
-				a, ok = i.([]interface{})
-				if !ok {
-					//Printf("getStr(%v) -> neither string nor []interface{}: %T\n", i, i)
-					return
-				}
-				if len(a) == 0 {
-					ok = false
-					//Printf("getStr(%v) -> empty array\n", i)
-					return
-				}
-				la := len(a)
-				o, ok = a[la-1].(string)
-				//Printf("getStr(%v) -> string[0]:%s\n", i, o)
-				return
+				//Printf("getStringValue(%v) - was not able to get string from %v\n", key, i)
 			}
-			getStringValue := func(it map[string]interface{}, key string) (val string, ok bool) {
-				var i interface{}
-				i, ok = Dig(it, []string{key}, false, true)
-				if ok {
-					val, ok = getStr(i)
+			lKey := strings.ToLower(key)
+			//Printf("getStringValue(%v) -> key not found, trying %s\n", key, lKey)
+			for k := range it {
+				if k == key {
+					continue
+				}
+				lK := strings.ToLower(k)
+				if lK == lKey {
+					//Printf("getStringValue(%v) -> %s matches\n", key, k)
+					i, ok = shared.Dig(it, []string{k}, false, true)
 					if ok {
-						//Printf("getStringValue(%v) -> string:%s\n", key, val)
-						return
-					}
-					//Printf("getStringValue(%v) - was not able to get string from %v\n", key, i)
-				}
-				lKey := strings.ToLower(key)
-				//Printf("getStringValue(%v) -> key not found, trying %s\n", key, lKey)
-				for k := range it {
-					if k == key {
-						continue
-					}
-					lK := strings.ToLower(k)
-					if lK == lKey {
-						//Printf("getStringValue(%v) -> %s matches\n", key, k)
-						i, ok = Dig(it, []string{k}, false, true)
+						val, ok = getStr(i)
 						if ok {
-							val, ok = getStr(i)
-							if ok {
-								//Printf("getStringValue(%v) -> %s string:%s\n", key, k, val)
-								return
-							}
-							//Printf("getStringValue(%v) - %s was not able to get string from %v\n", key, k, i)
-						}
-					}
-				}
-				//Printf("getStringValue(%v) -> key not found\n", key)
-				return
-			}
-			getIValue := func(it map[string]interface{}, key string) (i interface{}, ok bool) {
-				i, ok = Dig(it, []string{key}, false, true)
-				if ok {
-					//Printf("getIValue(%v) -> %T:%v\n", key, i, i)
-					return
-				}
-				lKey := strings.ToLower(key)
-				//Printf("getIValue(%v) -> key not found, trying %s\n", key, lKey)
-				for k := range it {
-					if k == key {
-						continue
-					}
-					lK := strings.ToLower(k)
-					if lK == lKey {
-						//Printf("getIValue(%v) -> %s matches\n", key, k)
-						i, ok = Dig(it, []string{k}, false, true)
-						if ok {
-							//Printf("getIValue(%v) -> %s %T:%v\n", key, k, i, i)
+							//Printf("getStringValue(%v) -> %s string:%s\n", key, k, val)
 							return
 						}
+						//Printf("getStringValue(%v) - %s was not able to get string from %v\n", key, k, i)
 					}
 				}
-				//Printf("getIValue(%v) -> key not found\n", key)
+			}
+			//Printf("getStringValue(%v) -> key not found\n", key)
+			return
+		}
+		getIValue := func(it map[string]interface{}, key string) (i interface{}, ok bool) {
+			i, ok = shared.Dig(it, []string{key}, false, true)
+			if ok {
+				//Printf("getIValue(%v) -> %T:%v\n", key, i, i)
 				return
 			}
-			rich["Message-ID"], ok = Dig(msg, []string{GroupsioMessageIDField}, false, true)
-			// original raw format support
-			if !ok {
-				rich["Message-ID"], ok = Dig(msg, []string{"Message-ID"}, false, true)
-				if !ok {
-					Fatalf("cannot find message-id/Message-ID field in %v\n", DumpKeys(msg))
-					return
+			lKey := strings.ToLower(key)
+			//Printf("getIValue(%v) -> key not found, trying %s\n", key, lKey)
+			for k := range it {
+				if k == key {
+					continue
+				}
+				lK := strings.ToLower(k)
+				if lK == lKey {
+					//Printf("getIValue(%v) -> %s matches\n", key, k)
+					i, ok = shared.Dig(it, []string{k}, false, true)
+					if ok {
+						//Printf("getIValue(%v) -> %s %T:%v\n", key, k, i, i)
+						return
+					}
 				}
 			}
-			rich["Date"] = msgDate
-			rich["Date_in_tz"] = msgDateInTz
-			rich["tz"] = msgTz
-			subj, _ := getStringValue(msg, "Subject")
-			rich["Subject_analyzed"] = subj
-			if len(subj) > GroupsioMaxMessageBodyLength {
-				subj = subj[:GroupsioMaxMessageBodyLength]
+			//Printf("getIValue(%v) -> key not found\n", key)
+			return
+		}
+		rich["Message-ID"], ok = shared.Dig(msg, []string{shared.MessageIDField[GroupsIO]}, false, true)
+		// original raw format support
+		if !ok {
+			rich["Message-ID"], ok = shared.Dig(msg, []string{"Message-ID"}, false, true)
+			if !ok {
+				shared.Fatalf("cannot find message-id/Message-ID field in %v\n", shared.DumpKeys(msg))
+				return
 			}
-			rich["Subject"] = subj
-			rich["email_date"], _ = getIValue(item, DefaultDateField)
-			rich["list"], _ = getStringValue(item, "origin")
-			lks := make(map[string]struct{})
-			for k := range msg {
-				lks[strings.ToLower(k)] = struct{}{}
-			}
-			_, ok = lks["in-reply-to"]
-			rich["root"] = !ok
-			var (
-				plain interface{}
-				text  string
-				found bool
-			)
-			plain, ok = Dig(msg, []string{"data", "text", "plain"}, false, true)
+		}
+		rich["Date"] = msgDate
+		rich["Date_in_tz"] = msgDateInTz
+		rich["tz"] = msgTz
+		subj, _ := getStringValue(msg, "Subject")
+		rich["Subject_analyzed"] = subj
+		if len(subj) > shared.MaxMessageBodyLength[GroupsIO] {
+			subj = subj[:shared.MaxMessageBodyLength[GroupsIO]]
+		}
+		rich["Subject"] = subj
+		rich["email_date"], _ = getIValue(item, "metadata__updated_on")
+		rich["list"], _ = getStringValue(item, "origin")
+		lks := make(map[string]struct{})
+		for k := range msg {
+			lks[strings.ToLower(k)] = struct{}{}
+		}
+		_, ok = lks["in-reply-to"]
+		rich["root"] = !ok
+		var (
+			plain interface{}
+			text  string
+			found bool
+		)
+		plain, ok = shared.Dig(msg, []string{"data", "text", "plain"}, false, true)
+		if ok {
+			a, ok := plain.([]interface{})
 			if ok {
-				a, ok := plain.([]interface{})
-				if ok {
-					if len(a) > 0 {
-						body, ok := a[0].(map[string]interface{})
+				if len(a) > 0 {
+					body, ok := a[0].(map[string]interface{})
+					if ok {
+						data, ok := body["data"]
 						if ok {
-							data, ok := body["data"]
-							if ok {
-								text, found = data.(string)
-							}
+							text, found = data.(string)
 						}
 					}
 				}
-			} else {
-				// original raw format support
-				plain, ok = Dig(msg, []string{"body", "plain"}, false, true)
-				if ok {
-					text, found = plain.(string)
-				}
 			}
-			if found {
-				rich["size"] = len(text)
-				ary := strings.Split(text, "\n")
-				if len(ary) > GroupsioMaxRichMessageLines {
-					ary = ary[:GroupsioMaxRichMessageLines]
-				}
-				text = strings.Join(ary, "\n")
-				if len(text) > GroupsioMaxMessageBodyLength {
-					text = text[:GroupsioMaxMessageBodyLength]
-				}
-				rich["body_extract"] = text
-			} else {
-				rich["size"] = nil
-				rich["body_extract"] = ""
-			}
-			rich["mbox_parse_warning"], _ = Dig(msg, []string{"MBox-Warn"}, false, true)
-			rich["mbox_bytes_length"], _ = Dig(msg, []string{"MBox-Bytes-Length"}, false, true)
-			rich["mbox_n_lines"], _ = Dig(msg, []string{"MBox-N-Lines"}, false, true)
-			rich["mbox_n_bodies"], _ = Dig(msg, []string{"MBox-N-Bodies"}, false, true)
-			rich["mbox_from"], _ = Dig(msg, []string{"MBox-From"}, false, true)
-			rich["mbox_date"] = nil
-			rich["mbox_date_str"] = ""
-			dtStr, ok := Dig(msg, []string{"MBox-Date"}, false, true)
+		} else {
+			// original raw format support
+			plain, ok = shared.Dig(msg, []string{"body", "plain"}, false, true)
 			if ok {
-				sdt, ok := dtStr.(string)
-				if ok {
-					rich["mbox_date_str"] = sdt
-					dt, dttz, tz, valid := ParseDateWithTz(sdt)
-					if valid {
-						rich["mbox_date"] = dt
-						rich["mbox_date_tz"] = tz
-						rich["mbox_date_in_tz"] = dttz
-					}
-				}
-			}
-			for prop, value := range CommonFields(j, msgDate, Message) {
-				rich[prop] = value
+				text, found = plain.(string)
 			}
 		}
-		if affs {
-			affsData := make(map[string]interface{})
-			var dt time.Time
-			dt, err = TimeParseInterfaceString(msgDate)
-			if err != nil {
-				switch vdt := msgDate.(type) {
-				case string:
-					dt, _, _, ok = ParseDateWithTz(vdt)
-					if !ok {
-						err = fmt.Errorf("cannot parse date %s", vdt)
-						return
-					}
-				case time.Time:
-					dt = vdt
-				default:
-					err = fmt.Errorf("cannot parse date %T %v", vdt, vdt)
-					return
-				}
-				err = nil
+		if found {
+			rich["size"] = len(text)
+			ary := strings.Split(text, "\n")
+			if len(ary) > GroupsioMaxRichMessageLines {
+				ary = ary[:GroupsioMaxRichMessageLines]
 			}
-			ary, _ := roleData.([3]string)
-			// (name, username, email)
-			identity := map[string]interface{}{
-				"name":     ary[0],
-				"username": ary[1],
-				"email":    ary[2],
+			text = strings.Join(ary, "\n")
+			if len(text) > shared.MaxMessageBodyLength[GroupsIO] {
+				text = text[:shared.MaxMessageBodyLength[GroupsIO]]
 			}
-			affsIdentity, empty, e := IdentityAffsData(ctx, j, identity, nil, dt, role)
-			if e != nil {
-				Printf("AffsItems/IdentityAffsData: error: %v for %v,%v,%v\n", e, identity, dt, role)
-			}
-			if empty {
-				Printf("no identity affiliation data for identity %+v\n", identity)
-			} else {
-				for prop, value := range affsIdentity {
-					affsData[prop] = value
-				}
-				for _, suff := range RequiredAffsFields {
-					k := role + suff
-					_, ok := affsIdentity[k]
-					if !ok {
-						affsIdentity[k] = Unknown
-					}
-				}
-				for prop, value := range affsData {
-					rich[prop] = value
-				}
-				orgsKey := role + MultiOrgNames
-				_, ok := Dig(rich, []string{orgsKey}, false, true)
-				if !ok {
-					rich[orgsKey] = []interface{}{}
+			rich["body_extract"] = text
+		} else {
+			rich["size"] = nil
+			rich["body_extract"] = ""
+		}
+		rich["mbox_parse_warning"], _ = shared.Dig(msg, []string{"MBox-Warn"}, false, true)
+		rich["mbox_bytes_length"], _ = shared.Dig(msg, []string{"MBox-Bytes-Length"}, false, true)
+		rich["mbox_n_lines"], _ = shared.Dig(msg, []string{"MBox-N-Lines"}, false, true)
+		rich["mbox_n_bodies"], _ = shared.Dig(msg, []string{"MBox-N-Bodies"}, false, true)
+		rich["mbox_from"], _ = shared.Dig(msg, []string{"MBox-From"}, false, true)
+		rich["mbox_date"] = nil
+		rich["mbox_date_str"] = ""
+		dtStr, ok := shared.Dig(msg, []string{"MBox-Date"}, false, true)
+		if ok {
+			sdt, ok := dtStr.(string)
+			if ok {
+				rich["mbox_date_str"] = sdt
+				dt, dttz, tz, valid := shared.ParseDateWithTz(sdt)
+				if valid {
+					rich["mbox_date"] = dt
+					rich["mbox_date_tz"] = tz
+					rich["mbox_date_in_tz"] = dttz
 				}
 			}
 		}
-		if role == Author {
-			rich["mbox_author_domain"], _ = Dig(rich, []string{"author_domain"}, false, true)
-			CopyAffsRoleData(rich, rich, "From", Author)
+	}
+	var dt time.Time
+	dt, err = shared.TimeParseInterfaceString(msgDate)
+	if err != nil {
+		switch vdt := msgDate.(type) {
+		case string:
+			dt, _, _, ok = shared.ParseDateWithTz(vdt)
+			if !ok {
+				err = fmt.Errorf("cannot parse date %s", vdt)
+				return
+			}
+		case time.Time:
+			dt = vdt
+		default:
+			err = fmt.Errorf("cannot parse date %T %v", vdt, vdt)
+			return
 		}
-		// From shared
-		rich["metadata__enriched_on"] = time.Now()
-		// rich[ProjectSlug] = ctx.ProjectSlug
-		// rich["groups"] = ctx.Groups
-	*/
+		err = nil
+	}
+	rich["date_parsed"] = dt
+	rich[role] = roleData
+	// From shared
+	rich["metadata__enriched_on"] = time.Now()
+	// rich[ProjectSlug] = ctx.ProjectSlug
+	// rich["groups"] = ctx.Groups
 	return
 }
 
@@ -1060,6 +1026,20 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 				}
 				if richPart != nil {
 					for k, v := range richPart {
+						if strings.HasPrefix(k, "recipient") {
+							recipient, _ := v.([3]string)
+							iRecipients, ok := rich["recipients"]
+							if ok {
+								recipients, _ := iRecipients.(map[[3]string]struct{})
+								recipients[recipient] = struct{}{}
+								rich["recipients"] = recipients
+								// shared.Printf("more recipients: %+v\n", recipients)
+							} else {
+								rich["recipients"] = map[[3]string]struct{}{recipient: {}}
+								// shared.Printf("first recipient: %+v\n", rich["recipients"])
+							}
+							continue
+						}
 						_, ok := rich[k]
 						if !ok {
 							rich[k] = v
@@ -1081,6 +1061,9 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 			mtx.Lock()
 		}
 		*docs = append(*docs, rich)
+		if len(*docs) >= ctx.PackSize {
+			outputDocs()
+		}
 		if thrN > 1 {
 			mtx.Unlock()
 		}
