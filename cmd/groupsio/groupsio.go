@@ -333,6 +333,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	url = GroupsioAPIURL + GroupsioAPIDownloadArchives + `?group_id=` + fmt.Sprintf("%d", groupID)
 	var (
 		from   time.Time
+		to     time.Time
 		status int
 	)
 	if ctx.DateFrom != nil {
@@ -342,6 +343,13 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 		from = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
 	url += `&start_time=` + neturl.QueryEscape(shared.ToYMDTHMSZDate(from))
+	if ctx.DateTo != nil {
+		to = *ctx.DateTo
+		to = to.Add(1 * time.Second)
+		url += `&end_time=` + neturl.QueryEscape(shared.ToYMDTHMSZDate(to))
+	} else {
+		to = time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
+	}
 	shared.Printf("fetching messages from: %s\n", url)
 	// Groups.io blocks downloading archives more often than 24 hours
 	cacheMsgDur := time.Duration(24)*time.Hour + time.Duration(5)*time.Minute
@@ -476,6 +484,10 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 			stat(false, false, false, true)
 			return
 		}
+		if ctx.DateTo != nil && updatedOn.After(to) {
+			stat(false, false, false, true)
+			return
+		}
 		esItem := j.AddMetadata(ctx, message)
 		if ctx.Project != "" {
 			message["project"] = ctx.Project
@@ -603,7 +615,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 		shared.Printf("%d invalid messages\n", invalid)
 	}
 	if filtered > 0 {
-		shared.Printf("%d filtered messages (updated before %v)\n", invalid, from)
+		shared.Printf("%d filtered messages (updated before %v or after %v)\n", invalid, from, to)
 	}
 	// NOTE: Non-generic ends here
 	gMaxCreatedAtMtx.Lock()
