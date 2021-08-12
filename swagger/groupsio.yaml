@@ -78,7 +78,7 @@ definitions:
         description: PK - up to 50 chars
       InternalId:
         type: string
-        example: 107625428
+        example: '<CAGh20b-Gyh4U0b62dQgxzmHkspAN2_bO1uk7V36ES_XdS7WupA@mail.gmail.com>'
         description: groups.io internal id - can be any string
       CreatedAt:
         type: string
@@ -107,7 +107,12 @@ definitions:
         type: object
         description: mailing list that message belongs to
         $ref: "#/definitions/MailingList"
-      InReplyTo:
+      ParentInternalID:
+        type: string
+        x-nullable: true
+        example: '<CAGh20b-Gyh4U0b62dQgxzmHkspAN2_bO1uk7V36ES_XdS7WupA@mail.gmail.com>'
+        description: parent message internal ID (system dependent, if present)
+      ParentID:
         type: string
         x-nullable: true
         example: 1234567890abcdef
