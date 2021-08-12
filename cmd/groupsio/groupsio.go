@@ -834,6 +834,10 @@ func (j *DSGroupsio) EnrichItem(ctx *shared.Ctx, item map[string]interface{}, ro
 		}
 		rich["Subject"] = subj
 		rich["email_date"], _ = getIValue(item, "metadata__updated_on")
+		parentMessageID, okParent := getStringValue(item, "In-Reply-To")
+		if okParent {
+			rich["parent_message_id"] = parentMessageID
+		}
 		rich["list"], _ = getStringValue(item, "origin")
 		lks := make(map[string]struct{})
 		for k := range msg {
@@ -1116,6 +1120,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 	}
 	source := data.DataSource.Slug
 	for _, iDoc := range docs {
+		var parent *string
 		doc, _ := iDoc.(map[string]interface{})
 		// shared.Printf("rich %+v\n", doc)
 		docUUID, _ := doc["uuid"].(string)
@@ -1129,6 +1134,10 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 		}
 		createdOnInTz, _ := doc["Date_in_tz"].(time.Time)
 		createdTz, _ := doc["tz"].(float64)
+		sParent, okParent := doc["parent_message_id"].(string)
+		if okParent {
+			parent = &sParent
+		}
 		sender, _ := doc["author"].([3]string)
 		recipients := []*models.Identity{}
 		iRecipients, ok := doc["recipients"]
@@ -1173,7 +1182,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 					Email:        email,
 				},
 				Recipients: recipients,
-				//InReplyTo:  0,
+				InReplyTo:  parent,
 				MailingList: &models.MailingList{
 					InternalID: fmt.Sprintf("%d", j.GroupID),
 					URL:        url,
