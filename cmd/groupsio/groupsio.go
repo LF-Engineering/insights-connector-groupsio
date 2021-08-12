@@ -480,6 +480,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 			return
 		}
 		updatedOn := j.ItemUpdatedOn(message)
+		// fmt.Printf("%v --> %v <-- %v\n", from, updatedOn, to)
 		if ctx.DateFrom != nil && updatedOn.Before(from) {
 			stat(false, false, false, true)
 			return
