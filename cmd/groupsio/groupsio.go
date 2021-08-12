@@ -18,6 +18,7 @@ import (
 
 	"github.com/LF-Engineering/insights-datasource-groupsio/gen/models"
 	shared "github.com/LF-Engineering/insights-datasource-shared"
+	"github.com/go-openapi/strfmt"
 	jsoniter "github.com/json-iterator/go"
 )
 
@@ -130,6 +131,10 @@ func (j *DSGroupsio) ParseArgs(ctx *shared.Ctx) (err error) {
 	if ctx.EnvSet("ARCHIVES_PATH") {
 		j.ArchPath = ctx.Env("ARCHIVES_PATH")
 	}
+
+	// NOTE: don't forget this
+	gGroupsioMetaData.Project = ctx.Project
+	gGroupsioMetaData.Tags = ctx.Tags
 	return
 }
 
@@ -1103,110 +1108,80 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 
 // GetModelData - return data in swagger format
 func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *models.Data) {
+	url := GroupsioURLRoot + j.GroupName
 	data = &models.Data{
 		DataSource: GroupsioDataSource,
 		MetaData:   gGroupsioMetaData,
-		Endpoint:   GroupsioURLRoot + j.GroupName,
+		Endpoint:   url,
 	}
 	source := data.DataSource.Slug
-	// FIXME
-	shared.Printf("%s\n", source)
-	/*
-		for _, iDoc := range docs {
-			var (
-				createdAt time.Time
-				body      *string
-				space     string
-				ancestors []*models.Ancestor
-			)
-			doc, _ := iDoc.(map[string]interface{})
-			// shared.Printf("rich %+v\n", doc)
-			typ, _ := doc["type"].(string)
-			typ = "confluence_" + typ
-			origType, _ := doc["original_type"].(string)
-			origType = "confluence_" + origType
-			iUpdatedOn, _ := doc["updated_on"]
-			updatedOn, err := shared.TimeParseInterfaceString(iUpdatedOn)
-			shared.FatalOnError(err)
-			if typ == "confluence_new_page" {
-				createdAt = updatedOn
-			}
-			gMaxCreatedAtMtx.Lock()
-			if updatedOn.After(gMaxCreatedAt) {
-				gMaxCreatedAt = updatedOn
-			}
-			gMaxCreatedAtMtx.Unlock()
-			docUUID, _ := doc["uuid"].(string)
-			actUUID := shared.UUIDNonEmpty(ctx, docUUID, shared.ToESDate(updatedOn))
-			if !j.SkipBody {
-				sBody, okBody := doc["body"].(string)
-				if okBody {
-					body = &sBody
-				}
-			}
-			avatar, _ := doc["avatar"].(string)
-			internalID, _ := doc["id"].(string)
-			title, _ := doc["title"].(string)
-			url, _ := doc["url"].(string)
-			space, _ = doc["space"].(string)
-			version, _ := doc["version"].(float64)
-			name, _ := doc["by_name"].(string)
-			username, _ := doc["by_username"].(string)
-			email, _ := doc["by_email"].(string)
-			name, username = shared.PostprocessNameUsername(name, username, email)
-			userUUID := shared.UUIDAffs(ctx, source, email, name, username)
-			iAIDs, ok := doc["ancestors_ids"]
-			if ok {
-				aIDs, ok := iAIDs.([]interface{})
-				if ok {
-					iATitles, _ := doc["ancestors_titles"]
-					iALinks, _ := doc["ancestors_links"]
-					aTitles, _ := iATitles.([]interface{})
-					aLinks, _ := iALinks.([]interface{})
-					for i, aID := range aIDs {
-						aid, _ := aID.(string)
-						aTitle, _ := aTitles[i].(string)
-						aLink, _ := aLinks[i].(string)
-						ancestors = append(ancestors, &models.Ancestor{
-							InternalID: aid,
-							Title:      aTitle,
-							URL:        aLink,
-						})
-					}
-				}
-			}
-			event := &models.Event{
-				DocumentActivity: &models.DocumentActivity{
-					DocumentActivityType: typ,
-					CreatedAt:            strfmt.DateTime(updatedOn),
-					ID:                   actUUID,
-					Body:                 body,
-					Identity: &models.Identity{
-						ID:           userUUID,
-						AvatarURL:    avatar,
-						DataSourceID: source,
-						Name:         name,
-						Username:     username,
-						Email:        email,
-					},
-					Documentation: &models.Documentation{
-						ID:              docUUID,
-						InternalID:      internalID,
-						CreatedAt:       strfmt.DateTime(createdAt),
-						UpdatedAt:       strfmt.DateTime(updatedOn),
-						Title:           title,
-						URL:             url,
-						Space:           &space,
-						DataSourceID:    source,
-						DocumentType:    origType,
-						DocumentVersion: fmt.Sprintf("%.0f", version),
-						Ancestors:       ancestors,
-					},
-				},
-			}
-			data.Events = append(data.Events, event)
+	for _, iDoc := range docs {
+		doc, _ := iDoc.(map[string]interface{})
+		// shared.Printf("rich %+v\n", doc)
+		docUUID, _ := doc["uuid"].(string)
+		messageID, _ := doc["Message-ID"].(string)
+		subject, _ := doc["Subject_analyzed"].(string)
+		body, _ := doc["body_extract"].(string)
+		createdOn, _ := doc["date_parsed"].(time.Time)
+		gMaxCreatedAtMtx.Lock()
+		if createdOn.After(gMaxCreatedAt) {
+			gMaxCreatedAt = createdOn
 		}
-	*/
+		createdOnInTz, _ := doc["Date_in_tz"].(time.Time)
+		createdTz, _ := doc["tz"].(float64)
+		sender, _ := doc["author"].([3]string)
+		recipients := []*models.Identity{}
+		iRecipients, ok := doc["recipients"]
+		if ok {
+			recs, _ := iRecipients.(map[[3]string]struct{})
+			for recipient := range recs {
+				name := recipient[0]
+				username := recipient[1]
+				email := recipient[2]
+				name, username = shared.PostprocessNameUsername(name, username, email)
+				userUUID := shared.UUIDAffs(ctx, source, email, name, username)
+				recipients = append(recipients, &models.Identity{
+					ID:           userUUID,
+					DataSourceID: source,
+					Name:         name,
+					Username:     username,
+					Email:        email,
+				})
+			}
+		}
+		name := sender[0]
+		username := sender[1]
+		email := sender[2]
+		name, username = shared.PostprocessNameUsername(name, username, email)
+		userUUID := shared.UUIDAffs(ctx, source, email, name, username)
+		// Event
+		event := &models.Event{
+			Message: &models.Message{
+				DataSourceID:  source,
+				MessageID:     docUUID,
+				InternalID:    messageID,
+				Subject:       subject,
+				Body:          body,
+				CreatedAt:     strfmt.DateTime(createdOn),
+				CreatedAtInTZ: strfmt.DateTime(createdOnInTz),
+				CreatedTZ:     createdTz,
+				Sender: &models.Identity{
+					ID:           userUUID,
+					DataSourceID: source,
+					Name:         name,
+					Username:     username,
+					Email:        email,
+				},
+				Recipients: recipients,
+				//InReplyTo:  0,
+				MailingList: &models.MailingList{
+					InternalID: fmt.Sprintf("%d", j.GroupID),
+					URL:        url,
+				},
+			},
+		}
+		data.Events = append(data.Events, event)
+	}
 	return
 }
 
