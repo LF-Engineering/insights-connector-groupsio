@@ -1135,6 +1135,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 		if createdOn.After(gMaxCreatedAt) {
 			gMaxCreatedAt = createdOn
 		}
+		gMaxCreatedAtMtx.Unlock()
 		createdOnInTz, _ := doc["Date_in_tz"].(time.Time)
 		createdTz, _ := doc["tz"].(float64)
 		sParent, okParent := doc["parent_message_id"].(string)
