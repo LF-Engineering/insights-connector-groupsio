@@ -239,7 +239,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	if ctx.DateTo != nil {
 		shared.Printf("%s fetching till %v (%d threads)\n", j.GroupName, ctx.DateTo, thrN)
 	}
-	// Non-generic starts here
+	// NOTE: Non-generic starts here
 	var dirPath string
 	if j.SaveArch {
 		dirPath = j.ArchPath + "/" + GroupsioURLRoot + j.GroupName
@@ -600,7 +600,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	if filtered > 0 {
 		shared.Printf("%d filtered messages (updated before %v)\n", invalid, from)
 	}
-	// Non-generic ends here
+	// NOTE: Non-generic ends here
 	gMaxCreatedAtMtx.Lock()
 	defer gMaxCreatedAtMtx.Unlock()
 	shared.SetLastUpdate(ctx, j.GroupName, gMaxCreatedAt)
@@ -987,7 +987,7 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 			outputDocs()
 		}()
 	}
-	// non-generic code starts
+	// NOTE: non-generic code starts
 	if ctx.Debug > 0 {
 		shared.Printf("groupsio enrich items %d/%d func\n", len(items), len(*docs))
 	}
@@ -1013,12 +1013,8 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 				c <- e
 			}
 		}()
-		src, ok := item.(map[string]interface{})["_source"]
-		if !ok {
-			e = fmt.Errorf("Missing _source in item %+v", shared.DumpKeys(item))
-			return
-		}
-		doc, ok := src.(map[string]interface{})
+		// NOTE: never refer to _source - we no longer use ES
+		doc, ok := item.(map[string]interface{})
 		if !ok {
 			e = fmt.Errorf("Failed to parse document %+v", doc)
 			return
