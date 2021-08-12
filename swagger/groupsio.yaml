@@ -69,6 +69,10 @@ definitions:
         type: string
         example: https://groups.io/g/hyperledger+fabric
         description: This always 'https://groups.io/g/' + group name
+      Name:
+        type: string
+        example: hyperledger+fabric
+        description: group name
   Message:
     type: object
     properties:

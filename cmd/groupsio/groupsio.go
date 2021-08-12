@@ -834,7 +834,7 @@ func (j *DSGroupsio) EnrichItem(ctx *shared.Ctx, item map[string]interface{}, ro
 		}
 		rich["Subject"] = subj
 		rich["email_date"], _ = getIValue(item, "metadata__updated_on")
-		parentMessageID, okParent := getStringValue(item, "In-Reply-To")
+		parentMessageID, okParent := getStringValue(msg, "In-Reply-To")
 		if okParent {
 			rich["parent_message_id"] = parentMessageID
 		}
@@ -1193,6 +1193,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 				MailingList: &models.MailingList{
 					InternalID: fmt.Sprintf("%d", j.GroupID),
 					URL:        url,
+					Name:       j.GroupName,
 				},
 			},
 		}
