@@ -1,0 +1,173 @@
+---
+swagger: '2.0'
+info:
+  title: Confluence data source
+  version: '1.0'
+  description: Confluence data source V2
+paths:    # swagger forces me to add at least one path
+  /noop:
+    get:
+      description: no-op
+      responses:
+        200:
+          description: ok
+definitions:
+  DataSource:
+    type: object
+    properties:
+      Slug:
+        type: string
+        example: confluence
+      Name:
+        type: string
+        example: Confluence
+  MetaData:
+    type: object
+    properties:
+      BackendName:
+        type: string
+        example: ds-confluence
+      BackendVersion:
+        type: string
+        example: v0.1.0
+      Project:
+        type: string
+        example: Kubernetes
+      Tags:
+        type: array
+        items:
+          type: string
+          example: my-tag
+  Ancestor:
+    type: object
+    properties:
+      InternalId:
+        type: string
+        example: 1234567890abcdef
+        description: PK - up to 50 chars
+      Title:
+        type: string
+        example: My page
+      URL:
+        type: string
+        example: https://wiki.onap.org/display/DW/Continuous+Integration
+  Identity:
+    type: object
+    properties:
+      Id:
+        type: string
+        example: 1234567890abcdef
+        description: PK - up to 50 chars
+      Name:
+        type: string
+        example: Lukasz Gryglicki
+      Username:
+        type: string
+        example: lgryglicki
+      Email:
+        type: string
+        example: lgryglicki@cncf.io
+      DataSourceId:
+        type: string
+        example: confluence
+        description: data source type slug (FK)
+      AvatarURL:
+        type: string
+        example: https://avatars.githubusercontent.com/u/13455738?v=4
+  Documentation:
+    type: object
+    properties:
+      Id:
+        type: string
+        example: 1234567890abcdef
+        description: PK - up to 50 chars
+      InternalId:
+        type: string
+        example: 107625428
+        description: Confluence internal id - can be any string
+      CreatedAt:
+        type: string
+        format: date-time
+        example: '2019-09-02 03:00:33.000000'
+      UpdatedAt:
+        type: string
+        format: date-time
+        example: '2019-09-02 03:00:33.000000'
+      Title:
+        type: string
+        example: My page
+      URL:
+        type: string
+        example: https://wiki.onap.org/display/DW/Continuous+Integration
+      Space:
+        type: string
+        example: faq
+        x-nullable: true
+      DataSourceId:
+        type: string
+        example: confluence
+        description: data source type slug (FK)
+      DocumentType:
+        type: string
+        example: confluence_page, confluence_page_comment
+        description: document type enum value (to reconstruct documentTypeId relation Documentation - DocumentTypeEnum)
+      Slug:
+        type: string
+        example: cncf/k8s
+        description: Slug points to project (FK), we don't store project data here, project data comes from onboarding
+      DocumentVersion:
+        type: string
+        example: 3
+        description: document version enum value (to reconstruct Documentation 1:N DocumentVersions N:1 Versions relation)
+      Ancestors:
+        type: array
+        items:
+          $ref: "#/definitions/Ancestor"
+  DocumentActivity:
+    type: object
+    properties:
+      Id:
+        type: string
+        example: 1234567890abcdef
+        description: PK - up to 50 chars
+      CreatedAt:
+        type: string
+        format: date-time
+        example: '2019-09-02 03:00:33.000000'
+      DocumentActivityType:
+        type: string
+        example: confluence_page_created, confluence_comment_added
+        description: allows reconstructing relation (DocumentActivity docuemntActivityTypeId DocumentActivityTypeEnum)
+      Body:
+        type: string
+        description: can store comment body (if activity is a comment) or page content (if activity is created or edited)
+        example: My comment body
+        x-nullable: true
+      Identity:
+        type: object
+        description: activity creator (ProjectDataSourceIdentity)
+        $ref: "#/definitions/Identity"
+      Documentation:
+        type: object
+        $ref: "#/definitions/Documentation"
+  Event:
+    type: object
+    description: single event in Confluence is a page, it also includes its extra properties, version data, hierarchy etc.
+    properties:
+      DocumentActivity:
+        type: object
+        $ref: "#/definitions/DocumentActivity"
+  Data:
+    type: object
+    description: this is the final output of insights-datasource-confluence, data source will output packs up to some fixed size, like 500 events pack at once
+    properties:
+      DataSource:
+        type: object
+        $ref: "#/definitions/DataSource"
+      MetaData:
+        type: object
+        $ref: "#/definitions/MetaData"
+      Events:
+        type: array
+        items:
+          $ref: "#/definitions/Event"
