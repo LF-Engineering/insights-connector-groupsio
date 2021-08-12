@@ -31,12 +31,6 @@ const (
 	GroupsioDefaultArchPath = "/tmp/mailinglists"
 	// GroupsioMBoxFile - default messages file name
 	GroupsioMBoxFile = "messages.zip"
-	// GroupsioMessageIDField - message ID field from email
-	GroupsioMessageIDField = "message-id"
-	// GroupsioMessageDateField - message ID field from email
-	GroupsioMessageDateField = "date"
-	// GroupsioMessageReceivedField - message Received filed
-	GroupsioMessageReceivedField = "received"
 	// GroupsioDefaultSearchField - default search field
 	GroupsioDefaultSearchField = "item_id"
 	// GroupsioMaxMessageBodyLength - trucacte message bodies longer than this (per each multi-body email part)
@@ -45,8 +39,6 @@ const (
 	GroupsioMaxRichMessageLines = 100
 	// GroupsioMaxRecipients - maximum number of emails parsed from To:
 	GroupsioMaxRecipients = 100
-	// GroupsioMaxMessageProperties - maximum properties that can be set on the message object
-	GroupsioMaxMessageProperties = 255
 )
 
 var (
