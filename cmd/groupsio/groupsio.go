@@ -235,11 +235,14 @@ func (j *DSGroupsio) Init(ctx *shared.Ctx) (err error) {
 // Sync - sync groups.io data source
 func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	thrN := shared.GetThreadsNum(ctx)
+	if ctx.DateFrom != nil {
+		shared.Printf("%s fetching from %v (%d threads)\n", j.GroupName, ctx.DateFrom, thrN)
+	}
 	if ctx.DateFrom == nil {
 		ctx.DateFrom = shared.GetLastUpdate(ctx, j.GroupName)
-	}
-	if ctx.DateFrom != nil {
-		shared.Printf("%s resuming from %v (%d threads)\n", j.GroupName, ctx.DateFrom, thrN)
+		if ctx.DateFrom != nil {
+			shared.Printf("%s resuming from %v (%d threads)\n", j.GroupName, ctx.DateFrom, thrN)
+		}
 	}
 	if ctx.DateTo != nil {
 		shared.Printf("%s fetching till %v (%d threads)\n", j.GroupName, ctx.DateTo, thrN)
@@ -591,16 +594,27 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	if ctx.Debug > 0 {
 		shared.Printf("%d wait channels\n", len(escha))
 	}
+	// NOTE: lock needed
+	if eschaMtx != nil {
+		eschaMtx.Lock()
+	}
 	for _, esch := range escha {
 		err = <-esch
 		if err != nil {
+			if eschaMtx != nil {
+				eschaMtx.Unlock()
+			}
 			return
 		}
+	}
+	if eschaMtx != nil {
+		eschaMtx.Unlock()
 	}
 	nMsgs := len(allMsgs)
 	if ctx.Debug > 0 {
 		shared.Printf("%d remaining messages to send to ES\n", nMsgs)
 	}
+	// NOTE: for all items, even if 0 - to flush the queue
 	err = j.GroupsioEnrichItems(ctx, thrN, allMsgs, &allDocs, true)
 	//err = SendToQueue(ctx, j, true, UUID, allMsgs)
 	if err != nil {
