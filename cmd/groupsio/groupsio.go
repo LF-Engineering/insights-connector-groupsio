@@ -1083,6 +1083,7 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 			mtx.Lock()
 		}
 		*docs = append(*docs, rich)
+		// NOTE: flush here
 		if len(*docs) >= ctx.PackSize {
 			outputDocs()
 		}
