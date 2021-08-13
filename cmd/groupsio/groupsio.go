@@ -954,7 +954,7 @@ func (j *DSGroupsio) EnrichItem(ctx *shared.Ctx, item map[string]interface{}, ro
 	}
 	rich["date_parsed"] = dt
 	rich[role] = roleData
-	// From shared
+	// NOTE: From shared
 	rich["metadata__enriched_on"] = time.Now()
 	// rich[ProjectSlug] = ctx.ProjectSlug
 	// rich["groups"] = ctx.Groups
@@ -1159,11 +1159,6 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 		subject, _ := doc["Subject_analyzed"].(string)
 		body, _ := doc["body_extract"].(string)
 		createdOn, _ := doc["date_parsed"].(time.Time)
-		gMaxCreatedAtMtx.Lock()
-		if createdOn.After(gMaxCreatedAt) {
-			gMaxCreatedAt = createdOn
-		}
-		gMaxCreatedAtMtx.Unlock()
 		createdOnInTz, _ := doc["Date_in_tz"].(time.Time)
 		createdTz, _ := doc["tz"].(float64)
 		sParent, okParent := doc["parent_message_id"].(string)
@@ -1226,6 +1221,11 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 			},
 		}
 		data.Events = append(data.Events, event)
+		gMaxCreatedAtMtx.Lock()
+		if createdOn.After(gMaxCreatedAt) {
+			gMaxCreatedAt = createdOn
+		}
+		gMaxCreatedAtMtx.Unlock()
 	}
 	return
 }
