@@ -1147,10 +1147,11 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 		Endpoint:   url,
 	}
 	source := data.DataSource.Slug
+	mailingListUUID := shared.UUIDNonEmpty(ctx, url, j.GroupName, fmt.Sprintf("%d", j.GroupID))
 	for _, iDoc := range docs {
 		var (
-			parentInternalID *string
-			parentID         *string
+			parentMessageID *string
+			parentID        *string
 		)
 		doc, _ := iDoc.(map[string]interface{})
 		// shared.Printf("rich %+v\n", doc)
@@ -1163,7 +1164,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 		createdTz, _ := doc["tz"].(float64)
 		sParent, okParent := doc["parent_message_id"].(string)
 		if okParent {
-			parentInternalID = &sParent
+			parentMessageID = &sParent
 			sParentID := shared.UUIDNonEmpty(ctx, url, sParent)
 			parentID = &sParentID
 		}
@@ -1196,8 +1197,8 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 		event := &models.Event{
 			Message: &models.Message{
 				DataSourceID:  source,
-				MessageID:     docUUID,
-				InternalID:    messageID,
+				ID:            docUUID,
+				MessageID:     messageID,
 				Subject:       subject,
 				Body:          body,
 				CreatedAt:     strfmt.DateTime(createdOn),
@@ -1210,13 +1211,14 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *mo
 					Username:     username,
 					Email:        email,
 				},
-				Recipients:       recipients,
-				ParentInternalID: parentInternalID,
-				ParentID:         parentID,
+				Recipients:      recipients,
+				ParentMessageID: parentMessageID,
+				ParentID:        parentID,
 				MailingList: &models.MailingList{
-					InternalID: fmt.Sprintf("%d", j.GroupID),
-					URL:        url,
-					Name:       j.GroupName,
+					ID:            mailingListUUID,
+					MailingListID: fmt.Sprintf("%d", j.GroupID),
+					URL:           url,
+					Name:          j.GroupName,
 				},
 			},
 		}
