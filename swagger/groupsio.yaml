@@ -21,6 +21,9 @@ definitions:
       Name:
         type: string
         example: Groups.io
+      Model:
+        type: string
+        example: mailinglist
   MetaData:
     type: object
     properties:

@@ -53,7 +53,7 @@ var (
 	gMaxCreatedAt    time.Time
 	gMaxCreatedAtMtx = &sync.Mutex{}
 	// GroupsioDataSource - constant
-	GroupsioDataSource = &models.DataSource{Name: "Groups.io", Slug: GroupsIO}
+	GroupsioDataSource = &models.DataSource{Name: "Groups.io", Slug: GroupsIO, Model: "mailinglist"}
 	gGroupsioMetaData  = &models.MetaData{BackendName: GroupsIO, BackendVersion: GroupsioBackendVersion}
 )
 
