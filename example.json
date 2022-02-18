@@ -1,0 +1,88 @@
+{
+  "message_created": [
+    {
+      "connector": "groupsio",
+      "connector_version": "0.1.0",
+      "created_at": 1645190943,
+      "created_by": "groupsio-connector",
+      "event_type": "groupsio-message.created",
+      "payload": {
+        "body": "We're happy [redacted]",
+        "group_name": "chipsalliance+announce",
+        "group_url": "https://groups.io/g/chipsalliance+announce",
+        "id": "9a2207161eb8786181b2eb137e1c0b75ebb613c687232361151ef6af94468b38",
+        "message_id": "<[redacted]@mail.gmail.com>",
+        "participants": [
+          {
+            "identity": {
+              "email": "[redacted]",
+              "identity_id": "9a710388c7e74e45fd5f716633585936efb28bc0",
+              "name": "[redacted]",
+              "source": "groupsio"
+            },
+            "role": "sender",
+            "weight": 1
+          },
+          {
+            "identity": {
+              "email": "announce@lists.chipsalliance.org",
+              "identity_id": "4bcdcd1af50da800074043474e2b34e7e30255e0",
+              "name": "announce",
+              "source": "groupsio"
+            },
+            "role": "receiver",
+            "weight": 1
+          }
+        ],
+        "source_timestamp": "2020-03-13T17:35:03+01:00",
+        "subject": "Getting Started with [redacted]",
+        "sync_timestamp": "2022-02-18T13:29:03.886773079Z"
+      },
+      "source": "groupsio",
+      "updated_at": 1645190943,
+      "updated_by": "groupsio-connector"
+    },
+    {
+      "connector": "groupsio",
+      "connector_version": "0.1.0",
+      "created_at": 1645190943,
+      "created_by": "groupsio-connector",
+      "event_type": "groupsio-message.created",
+      "payload": {
+        "body": "[redacted]",
+        "group_name": "chipsalliance+announce",
+        "group_url": "https://groups.io/g/chipsalliance+announce",
+        "id": "4aacab297ff34f19cd8dae0981e25e0e3978e2bcd54def5817cd6cc09498e36a",
+        "message_id": "<[redacted]@wdc.com>",
+        "participants": [
+          {
+            "identity": {
+              "email": "[redacted]",
+              "identity_id": "c7092911464f774ffd024c3fd2d664c5f8bd834c",
+              "name": "[redacted]",
+              "source": "groupsio"
+            },
+            "role": "sender",
+            "weight": 1
+          },
+          {
+            "identity": {
+              "email": "announce@lists.chipsalliance.org",
+              "identity_id": "4bcdcd1af50da800074043474e2b34e7e30255e0",
+              "name": "announce",
+              "source": "groupsio"
+            },
+            "role": "receiver",
+            "weight": 1
+          }
+        ],
+        "source_timestamp": "2020-03-31T16:50:13Z",
+        "subject": "[redacted]",
+        "sync_timestamp": "2022-02-18T13:29:03.887404912Z"
+      },
+      "source": "groupsio",
+      "updated_at": 1645190943,
+      "updated_by": "groupsio-connector"
+    }
+  ]
+}

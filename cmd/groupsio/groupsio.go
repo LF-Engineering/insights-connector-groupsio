@@ -17,6 +17,7 @@ import (
 	"github.com/LF-Engineering/lfx-event-schema/service"
 	"github.com/LF-Engineering/lfx-event-schema/service/insights"
 	"github.com/LF-Engineering/lfx-event-schema/service/insights/groupsio"
+	"github.com/LF-Engineering/lfx-event-schema/service/user"
 	"github.com/LF-Engineering/lfx-event-schema/utils/datalake"
 
 	neturl "net/url"
@@ -1305,97 +1306,130 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map
 			}
 		}
 	}()
-	/*
-		url := GroupsioURLRoot + j.GroupName
-		data = &models.Data{
-			DataSource: GroupsioDataSource,
-			MetaData:   gGroupsioMetaData,
-			Endpoint:   url,
+	source := GroupsioDataSource
+	groupURL := GroupsioURLRoot + j.GroupName
+	messageID, userID := "", ""
+	for _, iDoc := range docs {
+		doc, _ := iDoc.(map[string]interface{})
+		sourceMessageID, _ := doc["Message-ID"].(string)
+		messageID, err = insights.GenerateEmailMessageID(groupURL, source, sourceMessageID)
+		// shared.Printf("insights.GenerateEmailMessageID(%s,%s,%s) -> %s\n", groupURL, source, sourceMessageID, messageID)
+		if err != nil {
+			shared.Printf("insights.GenerateEmailMessageID(%s,%s,%s): %+v for %+v\n", groupURL, source, sourceMessageID, err, doc)
+			return
 		}
-		source := data.DataSource.Slug
-		mailingListUUID := shared.UUIDNonEmpty(ctx, url, j.GroupName, fmt.Sprintf("%d", j.GroupID))
-		for _, iDoc := range docs {
-			var (
-				parentMessageID *string
-				parentID        *string
-			)
-			doc, _ := iDoc.(map[string]interface{})
-			// shared.Printf("rich %+v\n", doc)
-			docUUID, _ := doc["uuid"].(string)
-			messageID, _ := doc["Message-ID"].(string)
-			subject, _ := doc["Subject_analyzed"].(string)
-			body, _ := doc["body_extract"].(string)
-			createdOn, _ := doc["date_parsed"].(time.Time)
-			createdOnInTz, _ := doc["Date_in_tz"].(time.Time)
-			createdTz, _ := doc["tz"].(float64)
-			sParent, okParent := doc["parent_message_id"].(string)
-			if okParent {
-				parentMessageID = &sParent
-				sParentID := shared.UUIDNonEmpty(ctx, url, sParent)
-				parentID = &sParentID
+		parentSourceMessageID, ok := doc["parent_message_id"].(string)
+		parentMessageID := ""
+		if ok && parentSourceMessageID != "" {
+			parentMessageID, err = insights.GenerateEmailMessageID(groupURL, source, parentSourceMessageID)
+			// shared.Printf("insights.GenerateEmailMessageID(%s,%s,%s) -> %s (parent)\n", groupURL, source, parentSourceMessageID, parentMessageID)
+			if err != nil {
+				shared.Printf("insights.GenerateEmailMessageID(%s,%s,%s): %+v for %+v (parent)\n", groupURL, source, parentSourceMessageID, err, doc)
+				return
 			}
-			sender, _ := doc["author"].([3]string)
-			recipients := []*models.Identity{}
-			iRecipients, ok := doc["recipients"]
-			if ok {
-				recs, _ := iRecipients.(map[[3]string]struct{})
-				for recipient := range recs {
-					name := recipient[0]
-					username := recipient[1]
-					email := recipient[2]
-					name, username = shared.PostprocessNameUsername(name, username, email)
-					userUUID := shared.UUIDAffs(ctx, source, email, name, username)
-					recipients = append(recipients, &models.Identity{
-						ID:           userUUID,
-						DataSourceID: source,
-						Name:         name,
-						Username:     username,
-						Email:        email,
-					})
+		}
+		createdOn, _ := doc["date_parsed"].(time.Time)
+		// May be needed in the future
+		// createdOnInTz, _ := doc["Date_in_tz"].(time.Time)
+		createdTz, _ := doc["tz"].(float64)
+		var loc *time.Location
+		if createdTz == 0 {
+			loc = time.FixedZone("UTC", 0)
+		} else if createdTz > 0 {
+			loc = time.FixedZone("UTC+"+fmt.Sprintf("%.0f", createdTz), int(createdTz)*3600)
+		} else {
+			loc = time.FixedZone("UTC-"+fmt.Sprintf("%.0f", -createdTz), int(createdTz)*3600)
+		}
+		// fmt.Printf("(%+v,%+v,%+v,%+v)\n", createdOn.In(loc), createdOnInTz, createdTz, loc)
+		body, _ := doc["body_extract"].(string)
+		subject, _ := doc["Subject_analyzed"].(string)
+		// Sender and recipients
+		contributors := []insights.Contributor{}
+		// Sender
+		sender, _ := doc["author"].([3]string)
+		name := sender[0]
+		username := sender[1]
+		email := sender[2]
+		// No identity data postprocessing in V2
+		// name, username = shared.PostprocessNameUsername(name, username, email)
+		userID, err = user.GenerateIdentity(&source, &email, &name, &username)
+		if err != nil {
+			shared.Printf("GenerateIdentity(%s,%s,%s,%s): %+v for %+v\n", source, email, name, username, err, doc)
+			return
+		}
+		contributor := insights.Contributor{
+			Role:   insights.SenderRole,
+			Weight: 1.0,
+			Identity: user.UserIdentityObjectBase{
+				ID:         userID,
+				Email:      email,
+				IsVerified: false,
+				Name:       name,
+				Username:   username,
+				Source:     source,
+			},
+		}
+		contributors = append(contributors, contributor)
+		// Recipients
+		iRecipients, ok := doc["recipients"]
+		if ok {
+			recs, _ := iRecipients.(map[[3]string]struct{})
+			for recipient := range recs {
+				name := recipient[0]
+				username := recipient[1]
+				email := recipient[2]
+				// No identity data postprocessing in V2
+				// name, username = shared.PostprocessNameUsername(name, username, email)
+				userID, err = user.GenerateIdentity(&source, &email, &name, &username)
+				if err != nil {
+					shared.Printf("GenerateIdentity(%s,%s,%s,%s): %+v for %+v\n", source, email, name, username, err, doc)
+					return
 				}
-			}
-			name := sender[0]
-			username := sender[1]
-			email := sender[2]
-			name, username = shared.PostprocessNameUsername(name, username, email)
-			userUUID := shared.UUIDAffs(ctx, source, email, name, username)
-			// Event
-			event := &models.Event{
-				Message: &models.Message{
-					DataSourceID:  source,
-					ID:            docUUID,
-					MessageID:     messageID,
-					Subject:       subject,
-					Body:          body,
-					CreatedAt:     strfmt.DateTime(createdOn),
-					CreatedAtInTZ: strfmt.DateTime(createdOnInTz),
-					CreatedTZ:     createdTz,
-					Sender: &models.Identity{
-						ID:           userUUID,
-						DataSourceID: source,
-						Name:         name,
-						Username:     username,
-						Email:        email,
+				contributor := insights.Contributor{
+					Role:   insights.ReceiverRole,
+					Weight: 1.0,
+					Identity: user.UserIdentityObjectBase{
+						ID:         userID,
+						Email:      email,
+						IsVerified: false,
+						Name:       name,
+						Username:   username,
+						Source:     source,
 					},
-					Recipients:      recipients,
-					ParentMessageID: parentMessageID,
-					ParentID:        parentID,
-					MailingList: &models.MailingList{
-						ID:            mailingListUUID,
-						MailingListID: fmt.Sprintf("%d", j.GroupID),
-						URL:           url,
-						Name:          j.GroupName,
-					},
-				},
+				}
+				contributors = append(contributors, contributor)
 			}
-			data.Events = append(data.Events, event)
-			gMaxCreatedAtMtx.Lock()
-			if createdOn.After(gMaxCreatedAt) {
-				gMaxCreatedAt = createdOn
-			}
-			gMaxCreatedAtMtx.Unlock()
 		}
-	*/
+		// Sender and recipients ends
+		// Final message object
+		message := groupsio.Message{
+			EmailMessage: insights.EmailMessage{
+				ID:              messageID,
+				MessageID:       sourceMessageID,
+				GroupURL:        groupURL,
+				GroupName:       j.GroupName,
+				Body:            body,
+				Subject:         subject,
+				InReplyTo:       parentMessageID,
+				SyncTimestamp:   time.Now(),
+				SourceTimestamp: createdOn.In(loc),
+				Participants:    shared.DedupContributors(contributors),
+			},
+		}
+		key := "message_created"
+		ary, ok := data[key]
+		if !ok {
+			ary = []interface{}{message}
+		} else {
+			ary = append(ary, message)
+		}
+		data[key] = ary
+		gMaxCreatedAtMtx.Lock()
+		if createdOn.After(gMaxCreatedAt) {
+			gMaxCreatedAt = createdOn
+		}
+		gMaxCreatedAtMtx.Unlock()
+	}
 	return
 }
 
