@@ -14,11 +14,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LF-Engineering/lfx-event-schema/service"
+	"github.com/LF-Engineering/lfx-event-schema/service/insights"
+	"github.com/LF-Engineering/lfx-event-schema/service/insights/groupsio"
+	"github.com/LF-Engineering/lfx-event-schema/utils/datalake"
+
 	neturl "net/url"
 
-	"github.com/LF-Engineering/insights-datasource-groupsio/gen/models"
 	shared "github.com/LF-Engineering/insights-datasource-shared"
-	"github.com/go-openapi/strfmt"
+	"github.com/LF-Engineering/insights-datasource-shared/cryptography"
+	elastic "github.com/LF-Engineering/insights-datasource-shared/elastic"
+	logger "github.com/LF-Engineering/insights-datasource-shared/ingestjob"
+
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	jsoniter "github.com/json-iterator/go"
 )
 
@@ -47,15 +56,23 @@ const (
 	GroupsioMaxRecipients = 100
 	// GroupsIO - used as an index
 	GroupsIO = "groupsio"
+	// GroupsioDataSource - data source name
+	GroupsioDataSource = "groupsio"
+	// GroupsioDefaultStream - Stream To Publish reviews
+	GroupsioDefaultStream = "PUT-S3-groupsio"
+	// GroupsioConnector ...
+	GroupsioConnector = "groupsio-connector"
 )
 
 var (
 	gMaxCreatedAt    time.Time
 	gMaxCreatedAtMtx = &sync.Mutex{}
-	// GroupsioDataSource - constant
-	GroupsioDataSource = &models.DataSource{Name: "Groups.io", Slug: GroupsIO, Model: "mailinglist"}
-	gGroupsioMetaData  = &models.MetaData{BackendName: GroupsIO, BackendVersion: GroupsioBackendVersion}
 )
+
+// Publisher - for streaming data to Kinesis
+type Publisher interface {
+	PushEvents(action, source, eventType, subEventType, env string, data []interface{}) error
+}
 
 // DSGroupsio - DS implementation for stub - does nothing at all, just presents a skeleton code
 type DSGroupsio struct {
@@ -69,7 +86,59 @@ type DSGroupsio struct {
 	FlagPassword  *string
 	FlagSaveArch  *bool
 	FlagArchPath  *string
+	FlagStream    *string
 	GroupID       int64
+	// Publisher & stream
+	Publisher
+	Stream string // stream to publish the data
+	Logger logger.Logger
+}
+
+// AddPublisher - sets Kinesis publisher
+func (j *DSGroupsio) AddPublisher(publisher Publisher) {
+	j.Publisher = publisher
+}
+
+// PublisherPushEvents - this is a fake function to test publisher locally
+// FIXME: don't use when done implementing
+func (j *DSGroupsio) PublisherPushEvents(ev, ori, src, cat, env string, v []interface{}) error {
+	data, err := jsoniter.Marshal(v)
+	shared.Printf("publish[ev=%s ori=%s src=%s cat=%s env=%s]: %d items: %+v -> %v\n", ev, ori, src, cat, env, len(v), string(data), err)
+	return nil
+}
+
+// AddLogger - adds logger
+func (j *DSGroupsio) AddLogger(ctx *shared.Ctx) {
+	client, err := elastic.NewClientProvider(&elastic.Params{
+		URL:      os.Getenv("ELASTIC_LOG_URL"),
+		Password: os.Getenv("ELASTIC_LOG_PASSWORD"),
+		Username: os.Getenv("ELASTIC_LOG_USER"),
+	})
+	if err != nil {
+		shared.Printf("AddLogger error: %+v", err)
+		return
+	}
+	logProvider, err := logger.NewLogger(client, os.Getenv("STAGE"))
+	if err != nil {
+		shared.Printf("AddLogger error: %+v", err)
+		return
+	}
+	j.Logger = *logProvider
+}
+
+// WriteLog - writes to log
+func (j *DSGroupsio) WriteLog(ctx *shared.Ctx, timestamp time.Time, status, message string) {
+	_ = j.Logger.Write(&logger.Log{
+		Connector: GroupsioDataSource,
+		Configuration: []map[string]string{
+			{
+				"GROUPSIO_GROUP_NAME": j.GroupName,
+				"ProjectSlug":         ctx.Project,
+			}},
+		Status:    status,
+		CreatedAt: timestamp,
+		Message:   message,
+	})
 }
 
 // AddFlags - add groups.io specific flags
@@ -79,10 +148,15 @@ func (j *DSGroupsio) AddFlags() {
 	j.FlagPassword = flag.String("groupsio-password", "", "Password to access group")
 	j.FlagSaveArch = flag.Bool("groupsio-save-archives", false, "Do we want to save archives locally?")
 	j.FlagArchPath = flag.String("groupsio-archives-path", GroupsioDefaultArchPath, "Archives path - default "+GroupsioDefaultArchPath)
+	j.FlagStream = flag.String("groupsio-stream", GroupsioDefaultStream, "groupsio kinesis stream name, for example PUT-S3-groupsio")
 }
 
 // ParseArgs - parse stub specific environment variables
-func (j *DSGroupsio) ParseArgs(ctx *shared.Ctx) (err error) {
+func (j *DSGroupsio) ParseArgs(ctx *shared.Ctx) error {
+	encrypt, err := cryptography.NewEncryptionClient()
+	if err != nil {
+		return err
+	}
 	// Confluence URL
 	if shared.FlagPassed(ctx, "group-name") && *j.FlagGroupName != "" {
 		j.GroupName = *j.FlagGroupName
@@ -92,7 +166,10 @@ func (j *DSGroupsio) ParseArgs(ctx *shared.Ctx) (err error) {
 	}
 	// Email
 	if shared.FlagPassed(ctx, "email") && *j.FlagEmail != "" {
-		j.Email = *j.FlagEmail
+		j.Email, err = encrypt.Decrypt(*j.FlagEmail)
+		if err != nil {
+			return err
+		}
 	}
 	if ctx.EnvSet("EMAIL") {
 		j.Email = ctx.Env("EMAIL")
@@ -104,7 +181,10 @@ func (j *DSGroupsio) ParseArgs(ctx *shared.Ctx) (err error) {
 
 	// Password
 	if shared.FlagPassed(ctx, "password") && *j.FlagPassword != "" {
-		j.Password = *j.FlagPassword
+		j.Password, err = encrypt.Decrypt(*j.FlagPassword)
+		if err != nil {
+			return err
+		}
 	}
 	if ctx.EnvSet("PASSWORD") {
 		j.Password = ctx.Env("PASSWORD")
@@ -132,10 +212,17 @@ func (j *DSGroupsio) ParseArgs(ctx *shared.Ctx) (err error) {
 		j.ArchPath = ctx.Env("ARCHIVES_PATH")
 	}
 
-	// NOTE: don't forget this
-	gGroupsioMetaData.Project = ctx.Project
-	gGroupsioMetaData.Tags = ctx.Tags
-	return
+	// groupsio Kinesis stream
+	j.Stream = GroupsioDefaultStream
+	if shared.FlagPassed(ctx, "stream") {
+		j.Stream = *j.FlagStream
+	}
+	if ctx.EnvSet("STREAM") {
+		j.Stream = ctx.Env("STREAM")
+	}
+	// gGroupsioMetaData.Project = ctx.Project
+	// gGroupsioMetaData.Tags = ctx.Tags
+	return nil
 }
 
 // Validate - is current DS configuration OK?
@@ -227,8 +314,23 @@ func (j *DSGroupsio) Init(ctx *shared.Ctx) (err error) {
 		return
 	}
 	if ctx.Debug > 1 {
-		shared.Printf("groups.io: %+v\nshared context: %s\n", j, ctx.Info())
+		g := &groupsio.Message{}
+		shared.Printf("Groups.io: %+v\nshared context: %s\nModel: %+v\n", j, ctx.Info(), g)
 	}
+	if ctx.Debug > 0 {
+		shared.Printf("stream: '%s'\n", j.Stream)
+	}
+	if j.Stream != "" {
+		sess, err := session.NewSession()
+		if err != nil {
+			return err
+		}
+		s3Client := s3.New(sess)
+		objectStore := datalake.NewS3ObjectStore(s3Client)
+		datalakeClient := datalake.NewStoreClient(&objectStore)
+		j.AddPublisher(&datalakeClient)
+	}
+	j.AddLogger(ctx)
 	return
 }
 
@@ -970,14 +1072,40 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 		if len(*docs) > 0 {
 			// actual output
 			shared.Printf("output processing(%d/%d/%v)\n", len(items), len(*docs), final)
-			data := j.GetModelData(ctx, *docs)
-			// FIXME: actual output to some consumer...
-			jsonBytes, err := jsoniter.Marshal(data)
+			var (
+				messageData map[string][]interface{}
+				jsonBytes   []byte
+				err         error
+			)
+			messageData, err = j.GetModelData(ctx, *docs)
+			if err == nil {
+				if j.Publisher != nil {
+					insightsStr := "insights"
+					messageStr := "message"
+					envStr := os.Getenv("STAGE")
+					for k, v := range messageData {
+						switch k {
+						case "message_created":
+							ev, _ := v[0].(groupsio.MessageCreatedEvent)
+							err = j.Publisher.PushEvents(ev.Event(), insightsStr, GroupsioDataSource, messageStr, envStr, v)
+						default:
+							err = fmt.Errorf("unknown event type '%s'", k)
+						}
+						if err != nil {
+							break
+						}
+					}
+				} else {
+					jsonBytes, err = jsoniter.Marshal(messageData)
+				}
+			}
 			if err != nil {
 				shared.Printf("Error: %+v\n", err)
 				return
 			}
-			shared.Printf("%s\n", string(jsonBytes))
+			if j.Publisher == nil {
+				shared.Printf("%s\n", string(jsonBytes))
+			}
 			*docs = []interface{}{}
 			gMaxCreatedAtMtx.Lock()
 			defer gMaxCreatedAtMtx.Unlock()
@@ -1138,97 +1266,136 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 	return
 }
 
-// GetModelData - return data in swagger format
-func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data *models.Data) {
-	url := GroupsioURLRoot + j.GroupName
-	data = &models.Data{
-		DataSource: GroupsioDataSource,
-		MetaData:   gGroupsioMetaData,
-		Endpoint:   url,
-	}
-	source := data.DataSource.Slug
-	mailingListUUID := shared.UUIDNonEmpty(ctx, url, j.GroupName, fmt.Sprintf("%d", j.GroupID))
-	for _, iDoc := range docs {
-		var (
-			parentMessageID *string
-			parentID        *string
-		)
-		doc, _ := iDoc.(map[string]interface{})
-		// shared.Printf("rich %+v\n", doc)
-		docUUID, _ := doc["uuid"].(string)
-		messageID, _ := doc["Message-ID"].(string)
-		subject, _ := doc["Subject_analyzed"].(string)
-		body, _ := doc["body_extract"].(string)
-		createdOn, _ := doc["date_parsed"].(time.Time)
-		createdOnInTz, _ := doc["Date_in_tz"].(time.Time)
-		createdTz, _ := doc["tz"].(float64)
-		sParent, okParent := doc["parent_message_id"].(string)
-		if okParent {
-			parentMessageID = &sParent
-			sParentID := shared.UUIDNonEmpty(ctx, url, sParent)
-			parentID = &sParentID
+// GetModelData - return data in lfx-event-schema format
+func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map[string][]interface{}, err error) {
+	data = make(map[string][]interface{})
+	defer func() {
+		if err != nil {
+			return
 		}
-		sender, _ := doc["author"].([3]string)
-		recipients := []*models.Identity{}
-		iRecipients, ok := doc["recipients"]
-		if ok {
-			recs, _ := iRecipients.(map[[3]string]struct{})
-			for recipient := range recs {
-				name := recipient[0]
-				username := recipient[1]
-				email := recipient[2]
-				name, username = shared.PostprocessNameUsername(name, username, email)
-				userUUID := shared.UUIDAffs(ctx, source, email, name, username)
-				recipients = append(recipients, &models.Identity{
-					ID:           userUUID,
-					DataSourceID: source,
-					Name:         name,
-					Username:     username,
-					Email:        email,
-				})
+		messageBaseEvent := groupsio.MessageBaseEvent{
+			Connector:        insights.GroupsioConnector,
+			ConnectorVersion: GroupsioBackendVersion,
+			Source:           insights.GroupsioSource,
+		}
+		for k, v := range data {
+			switch k {
+			case "message_created":
+				baseEvent := service.BaseEvent{
+					Type: service.EventType(groupsio.MessageCreatedEvent{}.Event()),
+					CRUDInfo: service.CRUDInfo{
+						CreatedBy: GroupsioConnector,
+						UpdatedBy: GroupsioConnector,
+						CreatedAt: time.Now().Unix(),
+						UpdatedAt: time.Now().Unix(),
+					},
+				}
+				ary := []interface{}{}
+				for _, message := range v {
+					ary = append(ary, groupsio.MessageCreatedEvent{
+						MessageBaseEvent: messageBaseEvent,
+						BaseEvent:        baseEvent,
+						Payload:          message.(groupsio.Message),
+					})
+				}
+				data[k] = ary
+			default:
+				err = fmt.Errorf("unknown message '%s' event", k)
+				return
 			}
 		}
-		name := sender[0]
-		username := sender[1]
-		email := sender[2]
-		name, username = shared.PostprocessNameUsername(name, username, email)
-		userUUID := shared.UUIDAffs(ctx, source, email, name, username)
-		// Event
-		event := &models.Event{
-			Message: &models.Message{
-				DataSourceID:  source,
-				ID:            docUUID,
-				MessageID:     messageID,
-				Subject:       subject,
-				Body:          body,
-				CreatedAt:     strfmt.DateTime(createdOn),
-				CreatedAtInTZ: strfmt.DateTime(createdOnInTz),
-				CreatedTZ:     createdTz,
-				Sender: &models.Identity{
-					ID:           userUUID,
-					DataSourceID: source,
-					Name:         name,
-					Username:     username,
-					Email:        email,
-				},
-				Recipients:      recipients,
-				ParentMessageID: parentMessageID,
-				ParentID:        parentID,
-				MailingList: &models.MailingList{
-					ID:            mailingListUUID,
-					MailingListID: fmt.Sprintf("%d", j.GroupID),
-					URL:           url,
-					Name:          j.GroupName,
-				},
-			},
+	}()
+	/*
+		url := GroupsioURLRoot + j.GroupName
+		data = &models.Data{
+			DataSource: GroupsioDataSource,
+			MetaData:   gGroupsioMetaData,
+			Endpoint:   url,
 		}
-		data.Events = append(data.Events, event)
-		gMaxCreatedAtMtx.Lock()
-		if createdOn.After(gMaxCreatedAt) {
-			gMaxCreatedAt = createdOn
+		source := data.DataSource.Slug
+		mailingListUUID := shared.UUIDNonEmpty(ctx, url, j.GroupName, fmt.Sprintf("%d", j.GroupID))
+		for _, iDoc := range docs {
+			var (
+				parentMessageID *string
+				parentID        *string
+			)
+			doc, _ := iDoc.(map[string]interface{})
+			// shared.Printf("rich %+v\n", doc)
+			docUUID, _ := doc["uuid"].(string)
+			messageID, _ := doc["Message-ID"].(string)
+			subject, _ := doc["Subject_analyzed"].(string)
+			body, _ := doc["body_extract"].(string)
+			createdOn, _ := doc["date_parsed"].(time.Time)
+			createdOnInTz, _ := doc["Date_in_tz"].(time.Time)
+			createdTz, _ := doc["tz"].(float64)
+			sParent, okParent := doc["parent_message_id"].(string)
+			if okParent {
+				parentMessageID = &sParent
+				sParentID := shared.UUIDNonEmpty(ctx, url, sParent)
+				parentID = &sParentID
+			}
+			sender, _ := doc["author"].([3]string)
+			recipients := []*models.Identity{}
+			iRecipients, ok := doc["recipients"]
+			if ok {
+				recs, _ := iRecipients.(map[[3]string]struct{})
+				for recipient := range recs {
+					name := recipient[0]
+					username := recipient[1]
+					email := recipient[2]
+					name, username = shared.PostprocessNameUsername(name, username, email)
+					userUUID := shared.UUIDAffs(ctx, source, email, name, username)
+					recipients = append(recipients, &models.Identity{
+						ID:           userUUID,
+						DataSourceID: source,
+						Name:         name,
+						Username:     username,
+						Email:        email,
+					})
+				}
+			}
+			name := sender[0]
+			username := sender[1]
+			email := sender[2]
+			name, username = shared.PostprocessNameUsername(name, username, email)
+			userUUID := shared.UUIDAffs(ctx, source, email, name, username)
+			// Event
+			event := &models.Event{
+				Message: &models.Message{
+					DataSourceID:  source,
+					ID:            docUUID,
+					MessageID:     messageID,
+					Subject:       subject,
+					Body:          body,
+					CreatedAt:     strfmt.DateTime(createdOn),
+					CreatedAtInTZ: strfmt.DateTime(createdOnInTz),
+					CreatedTZ:     createdTz,
+					Sender: &models.Identity{
+						ID:           userUUID,
+						DataSourceID: source,
+						Name:         name,
+						Username:     username,
+						Email:        email,
+					},
+					Recipients:      recipients,
+					ParentMessageID: parentMessageID,
+					ParentID:        parentID,
+					MailingList: &models.MailingList{
+						ID:            mailingListUUID,
+						MailingListID: fmt.Sprintf("%d", j.GroupID),
+						URL:           url,
+						Name:          j.GroupName,
+					},
+				},
+			}
+			data.Events = append(data.Events, event)
+			gMaxCreatedAtMtx.Lock()
+			if createdOn.After(gMaxCreatedAt) {
+				gMaxCreatedAt = createdOn
+			}
+			gMaxCreatedAtMtx.Unlock()
 		}
-		gMaxCreatedAtMtx.Unlock()
-	}
+	*/
 	return
 }
 
