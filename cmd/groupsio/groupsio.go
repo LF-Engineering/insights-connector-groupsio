@@ -158,7 +158,7 @@ func (j *DSGroupsio) ParseArgs(ctx *shared.Ctx) error {
 	if err != nil {
 		return err
 	}
-	// Confluence URL
+	// Groups.io URL
 	if shared.FlagPassed(ctx, "group-name") && *j.FlagGroupName != "" {
 		j.GroupName = *j.FlagGroupName
 	}

@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/LF-Engineering/insights-datasource-shared v1.4.2-0.20220221062423-d8079faae5d9
-	github.com/LF-Engineering/lfx-event-schema v0.1.8-0.20220218220515-b1df6c6030cd
+	github.com/LF-Engineering/lfx-event-schema v0.1.8-0.20220222065807-ff1d2ad9813e
 	github.com/aws/aws-lambda-go v1.28.0
 	github.com/aws/aws-sdk-go v1.42.24
 	github.com/json-iterator/go v1.1.12
