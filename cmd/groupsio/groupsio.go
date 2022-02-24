@@ -1443,9 +1443,14 @@ func main() {
 		shared.Printf("Error: %+v\n", err)
 		return
 	}
+	timestamp := time.Now()
+	shared.AddLogger(&groupsio.Logger, GroupsioDataSource, logger.Internal, []map[string]string{{"GROUPSIO_GROUP_NAME": groupsio.GroupName, "ProjectSlug": ctx.Project}})
+	groupsio.WriteLog(&ctx, timestamp, logger.InProgress, "message")
 	err = groupsio.Sync(&ctx)
 	if err != nil {
 		shared.Printf("Error: %+v\n", err)
+		groupsio.WriteLog(&ctx, timestamp, logger.Failed, "message: "+err.Error())
 		return
 	}
+	groupsio.WriteLog(&ctx, timestamp, logger.Done, "message")
 }
