@@ -14,4 +14,4 @@ ENV ELASTIC_LOG_PASSWORD='<ELASTIC-LOG-PASSWORD>'
 RUN apk update && apk add --no-cache bash && apk add gcompat
 RUN ls -ltra
 COPY groupsio ./
-CMD ./groupsio --groupsio-group-name="${GROUPSIO_GROUP_NAME}" --groupsio-es-url="${ES_URL}" --groupsio-email="${GROUPSIO_EMAIL}" --groupsio-password="${GROUPSIO_PASSWORD}}" --groupsio-save-archives="${GROUPSIO_SAVE_ARCHIVES}"
+CMD ./groupsio --groupsio-group-name="${GROUPSIO_GROUP_NAME}" --groupsio-es-url="${ES_URL}" --groupsio-email="${GROUPSIO_EMAIL}" --groupsio-password="${GROUPSIO_PASSWORD}" --groupsio-save-archives="${GROUPSIO_SAVE_ARCHIVES}"

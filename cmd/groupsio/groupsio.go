@@ -166,30 +166,26 @@ func (j *DSGroupsio) ParseArgs(ctx *shared.Ctx) error {
 		j.GroupName = ctx.Env("GROUP_NAME")
 	}
 	// Email
-	if shared.FlagPassed(ctx, "email") && *j.FlagEmail != "" {
+	if (shared.FlagPassed(ctx, "email") && *j.FlagEmail != "") || ctx.EnvSet("EMAIL") {
 		j.Email, err = encrypt.Decrypt(*j.FlagEmail)
 		if err != nil {
 			return err
 		}
 	}
-	if ctx.EnvSet("EMAIL") {
-		j.Email = ctx.Env("EMAIL")
-	}
+
 	if j.Email != "" {
 		shared.AddRedacted(j.Email, false)
 		shared.AddRedacted(neturl.QueryEscape(j.Email), false)
 	}
 
 	// Password
-	if shared.FlagPassed(ctx, "password") && *j.FlagPassword != "" {
+	if (shared.FlagPassed(ctx, "password") && *j.FlagPassword != "") || ctx.EnvSet("PASSWORD") {
 		j.Password, err = encrypt.Decrypt(*j.FlagPassword)
 		if err != nil {
 			return err
 		}
 	}
-	if ctx.EnvSet("PASSWORD") {
-		j.Password = ctx.Env("PASSWORD")
-	}
+
 	if j.Password != "" {
 		shared.AddRedacted(j.Password, false)
 		shared.AddRedacted(neturl.QueryEscape(j.Password), false)
@@ -370,6 +366,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	cacheLoginDur := time.Duration(24)*time.Hour + time.Duration(5)*time.Minute
 	var res interface{}
 	var cookies []string
+	fmt.Println(url)
 	shared.Printf("groupsio login via: %s\n", url)
 	res, _, cookies, _, err = shared.Request(
 		ctx,
