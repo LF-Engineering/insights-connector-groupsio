@@ -167,30 +167,32 @@ func (j *DSGroupsio) ParseArgs(ctx *shared.Ctx) error {
 	}
 	// Email
 	if shared.FlagPassed(ctx, "email") && *j.FlagEmail != "" {
-		j.Email, err = encrypt.Decrypt(*j.FlagEmail)
-		if err != nil {
-			return err
-		}
+		j.Email = *j.FlagEmail
 	}
 	if ctx.EnvSet("EMAIL") {
 		j.Email = ctx.Env("EMAIL")
 	}
 	if j.Email != "" {
+		j.Email, err = encrypt.Decrypt(j.Email)
+		if err != nil {
+			return err
+		}
 		shared.AddRedacted(j.Email, false)
 		shared.AddRedacted(neturl.QueryEscape(j.Email), false)
 	}
 
 	// Password
 	if shared.FlagPassed(ctx, "password") && *j.FlagPassword != "" {
-		j.Password, err = encrypt.Decrypt(*j.FlagPassword)
-		if err != nil {
-			return err
-		}
+		j.Password = *j.FlagPassword
 	}
 	if ctx.EnvSet("PASSWORD") {
 		j.Password = ctx.Env("PASSWORD")
 	}
 	if j.Password != "" {
+		j.Password, err = encrypt.Decrypt(j.Password)
+		if err != nil {
+			return err
+		}
 		shared.AddRedacted(j.Password, false)
 		shared.AddRedacted(neturl.QueryEscape(j.Password), false)
 	}
