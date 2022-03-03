@@ -1306,9 +1306,15 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map
 			}
 		}
 	}()
+	messageID, userID, groupID := "", "", ""
 	source := GroupsioDataSource
 	groupURL := GroupsioURLRoot + j.GroupName
-	messageID, userID := "", ""
+	groupID, err = insights.GenerateGroupID(groupURL, source)
+	// shared.Printf("insights.GenerateGroupID(%s,%s) -> %s\n", groupURL, source, messageID)
+	if err != nil {
+		shared.Printf("insights.GenerateGroupID(%s,%s): %+v\n", groupURL, source, err)
+		return
+	}
 	for _, iDoc := range docs {
 		doc, _ := iDoc.(map[string]interface{})
 		sourceMessageID, _ := doc["Message-ID"].(string)
@@ -1408,6 +1414,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map
 				MessageID:       sourceMessageID,
 				GroupURL:        groupURL,
 				GroupName:       j.GroupName,
+				GroupID:         groupID,
 				Body:            body,
 				Subject:         subject,
 				InReplyTo:       parentMessageID,
