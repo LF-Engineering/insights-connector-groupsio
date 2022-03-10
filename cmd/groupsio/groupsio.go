@@ -1453,6 +1453,8 @@ func main() {
 		return
 	}
 	timestamp := time.Now()
+	shared.SetSyncMode(true, false)
+	shared.SetLogLoggerError(false)
 	shared.AddLogger(&groupsio.Logger, GroupsioDataSource, logger.Internal, []map[string]string{{"GROUPSIO_GROUP_NAME": groupsio.GroupName, "ProjectSlug": ctx.Project}})
 	groupsio.WriteLog(&ctx, timestamp, logger.InProgress, "message")
 	err = groupsio.Sync(&ctx)
