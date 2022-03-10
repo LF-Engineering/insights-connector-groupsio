@@ -1320,6 +1320,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map
 	for _, iDoc := range docs {
 		doc, _ := iDoc.(map[string]interface{})
 		sourceMessageID, _ := doc["Message-ID"].(string)
+		sourceMessageID = strings.TrimRight(strings.TrimLeft(sourceMessageID, "<"), ">")
 		messageID, err = insights.GenerateEmailMessageID(groupURL, source, sourceMessageID)
 		// shared.Printf("insights.GenerateEmailMessageID(%s,%s,%s) -> %s\n", groupURL, source, sourceMessageID, messageID)
 		if err != nil {
@@ -1327,6 +1328,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map
 			return
 		}
 		parentSourceMessageID, ok := doc["parent_message_id"].(string)
+		parentSourceMessageID = strings.TrimRight(strings.TrimLeft(parentSourceMessageID, "<"), ">")
 		parentMessageID := ""
 		if ok && parentSourceMessageID != "" {
 			parentMessageID, err = insights.GenerateEmailMessageID(groupURL, source, parentSourceMessageID)
