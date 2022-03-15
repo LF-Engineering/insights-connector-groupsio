@@ -34,3 +34,5 @@ bin
 *.token
 *.secret
 *.log
+messages.zip
+messages.mbox
