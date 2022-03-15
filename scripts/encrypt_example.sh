@@ -10,4 +10,4 @@ export GROUPSIO_NO_INCREMENTAL=1
 # curl -s -XPOST -H 'Content-Type: application/json' "${ESURL}/last-update-cache/_delete_by_query" -d'{"query":{"term":{"key.keyword":"Groups.io:hyperledger+fabric"}}}' | jq -rS '.' || exit 1
 ../insights-datasource-github/encrypt "`cat ./secrets/email.secret`" > ./secrets/email.encrypted.secret || exit 2
 ../insights-datasource-github/encrypt "`cat ./secrets/password.secret`" > ./secrets/password.encrypted.secret || exit 3
-./groupsio --groupsio-group-name='chipsalliance+announce' --groupsio-save-archives=1 --groupsio-debug=0 --groupsio-es-url="${ESURL}" --groupsio-email="`cat ./secrets/email.encrypted.secret`" --groupsio-password="`cat ./secrets/password.encrypted.secret`" --groupsio-stream="${STREAM}" $* | tee run.log
+./groupsio --groupsio-group-name='hyperledger+aries' --groupsio-save-archives=1 --groupsio-debug=0 --groupsio-es-url="${ESURL}" --groupsio-email="`cat ./secrets/email.encrypted.secret`" --groupsio-password="`cat ./secrets/password.encrypted.secret`" --groupsio-stream="${STREAM}" $* | tee run.log
