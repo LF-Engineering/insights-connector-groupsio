@@ -1159,6 +1159,7 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 			}
 			return
 		}
+		// shared.Printf("GetItemIdentitiesEx -> %d,%d -> %+v\n", len(identities), nRecipients, identities)
 		counts := make(map[string]int)
 		getAuthorPrefix := func(origin string) (author string) {
 			origin = strings.ToLower(origin)
@@ -1178,12 +1179,15 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 		authorFound := false
 		for identity, origins := range identities {
 			for origin := range origins {
+				// shared.Printf("origin %s -> %+v\n", origin, identity)
 				var richPart map[string]interface{}
 				auth := getAuthorPrefix(origin)
 				if rich == nil {
 					rich, e = j.EnrichItem(ctx, doc, auth, identity)
+					// shared.Printf("full rich %s: %+v -> %+v\n", auth, identity, e)
 				} else {
 					richPart, e = j.EnrichItem(ctx, doc, auth, identity)
+					// shared.Printf("part rich %s: %+v -> %+v\n", auth, identity, e)
 				}
 				if e != nil {
 					return
@@ -1193,6 +1197,7 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 				}
 				if richPart != nil {
 					for k, v := range richPart {
+						// if strings.HasPrefix(k, "recipient") && k != "recipients" {
 						if strings.HasPrefix(k, "recipient") {
 							recipient, _ := v.([3]string)
 							iRecipients, ok := rich["recipients"]
@@ -1213,6 +1218,19 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 						}
 					}
 				}
+			}
+		}
+		recipient, ok := rich["recipient"].([3]string)
+		if ok {
+			iRecipients, ok := rich["recipients"]
+			if ok {
+				recipients, _ := iRecipients.(map[[3]string]struct{})
+				recipients[recipient] = struct{}{}
+				rich["recipients"] = recipients
+				// shared.Printf("more final recipients: %+v\n", recipients)
+			} else {
+				rich["recipients"] = map[[3]string]struct{}{recipient: {}}
+				// shared.Printf("first final recipient: %+v\n", rich["recipients"])
 			}
 		}
 		if !authorFound {
