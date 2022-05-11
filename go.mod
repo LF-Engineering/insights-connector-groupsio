@@ -3,8 +3,8 @@ module github.com/LF-Engineering/insights-datasource-groupsio
 go 1.17
 
 require (
-	github.com/LF-Engineering/insights-datasource-shared v1.4.3-0.20220314162813-49e8868ac871
-	github.com/LF-Engineering/lfx-event-schema v0.1.14
+	github.com/LF-Engineering/insights-datasource-shared v1.4.5-0.20220511063206-6754a12066b9
+	github.com/LF-Engineering/lfx-event-schema v0.1.20-0.20220510142557-956ba192fade
 	github.com/aws/aws-lambda-go v1.28.0
 	github.com/aws/aws-sdk-go v1.42.24
 	github.com/json-iterator/go v1.1.12
