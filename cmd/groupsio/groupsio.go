@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -13,6 +14,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/LF-Engineering/insights-datasource-groupsio/build"
+	"github.com/LF-Engineering/insights-datasource-shared/aws"
+	"github.com/LF-Engineering/insights-datasource-shared/cache"
+	"github.com/sirupsen/logrus"
 
 	"github.com/LF-Engineering/lfx-event-schema/service"
 	"github.com/LF-Engineering/lfx-event-schema/service/insights"
@@ -91,8 +97,11 @@ type DSGroupsio struct {
 	GroupID       int64
 	// Publisher & stream
 	Publisher
-	Stream string // stream to publish the data
-	Logger logger.Logger
+	Stream        string // stream to publish the data
+	Logger        logger.Logger
+	log           *logrus.Entry
+	cacheProvider cache.Manager
+	endpoint      string
 }
 
 // AddPublisher - sets Kinesis publisher
@@ -116,20 +125,25 @@ func (j *DSGroupsio) AddLogger(ctx *shared.Ctx) {
 		Username: os.Getenv("ELASTIC_LOG_USER"),
 	})
 	if err != nil {
-		shared.Printf("AddLogger error: %+v", err)
+		j.log.WithFields(logrus.Fields{"operation": "AddLogger"}).Errorf("create elastic provider error: %+v", err)
 		return
 	}
 	logProvider, err := logger.NewLogger(client, os.Getenv("STAGE"))
 	if err != nil {
-		shared.Printf("AddLogger error: %+v", err)
+		j.log.WithFields(logrus.Fields{"operation": "AddLogger"}).Errorf("AddLogger error: %+v", err)
 		return
 	}
 	j.Logger = *logProvider
 }
 
 // WriteLog - writes to log
-func (j *DSGroupsio) WriteLog(ctx *shared.Ctx, timestamp time.Time, status, message string) {
-	_ = j.Logger.Write(&logger.Log{
+func (j *DSGroupsio) WriteLog(ctx *shared.Ctx, timestamp time.Time, status, message string) error {
+	arn, err := aws.GetContainerARN()
+	if err != nil {
+		j.log.WithFields(logrus.Fields{"operation": "WriteLog"}).Errorf("getContainerMetadata Error : %+v", err)
+		return err
+	}
+	err = j.Logger.Write(&logger.Log{
 		Connector: GroupsioDataSource,
 		Configuration: []map[string]string{
 			{
@@ -139,7 +153,9 @@ func (j *DSGroupsio) WriteLog(ctx *shared.Ctx, timestamp time.Time, status, mess
 		Status:    status,
 		CreatedAt: timestamp,
 		Message:   message,
+		TaskARN:   arn,
 	})
+	return err
 }
 
 // AddFlags - add groups.io specific flags
@@ -297,7 +313,7 @@ func (j *DSGroupsio) AddMetadata(ctx *shared.Ctx, msg interface{}) (mItem map[st
 	mItem["metadata__timestamp"] = shared.ToESDate(timestamp)
 	// mItem[ProjectSlug] = ctx.ProjectSlug
 	if ctx.Debug > 1 {
-		shared.Printf("%s: %s: %v %v\n", origin, uuid, msgID, updatedOn)
+		j.log.WithFields(logrus.Fields{"operation": "AddMetadata"}).Debugf("%s: %s: %v %v", origin, uuid, msgID, updatedOn)
 	}
 	return
 }
@@ -318,10 +334,10 @@ func (j *DSGroupsio) Init(ctx *shared.Ctx) (err error) {
 	}
 	if ctx.Debug > 1 {
 		g := &groupsio.Message{}
-		shared.Printf("Groups.io: %+v\nshared context: %s\nModel: %+v\n", j, ctx.Info(), g)
+		j.log.WithFields(logrus.Fields{"operation": "Init"}).Debugf("Groups.io: %+v\nshared context: %s\nModel: %+v", j, ctx.Info(), g)
 	}
 	if ctx.Debug > 0 {
-		shared.Printf("stream: '%s'\n", j.Stream)
+		j.log.WithFields(logrus.Fields{"operation": "Init"}).Debugf("stream: '%s'", j.Stream)
 	}
 	if j.Stream != "" {
 		sess, err := session.NewSession()
@@ -341,16 +357,21 @@ func (j *DSGroupsio) Init(ctx *shared.Ctx) (err error) {
 func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	thrN := shared.GetThreadsNum(ctx)
 	if ctx.DateFrom != nil {
-		shared.Printf("%s fetching from %v (%d threads)\n", j.GroupName, ctx.DateFrom, thrN)
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("%s fetching from %v (%d threads)", j.GroupName, ctx.DateFrom, thrN)
 	}
 	if ctx.DateFrom == nil {
-		ctx.DateFrom = shared.GetLastUpdate(ctx, j.GroupName)
+		cachedLastSync, er := j.cacheProvider.GetLastSync(j.endpoint)
+		if er != nil {
+			err = er
+			return
+		}
+		ctx.DateFrom = &cachedLastSync
 		if ctx.DateFrom != nil {
-			shared.Printf("%s resuming from %v (%d threads)\n", j.GroupName, ctx.DateFrom, thrN)
+			j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("%s resuming from %v (%d threads)", j.GroupName, ctx.DateFrom, thrN)
 		}
 	}
 	if ctx.DateTo != nil {
-		shared.Printf("%s fetching till %v (%d threads)\n", j.GroupName, ctx.DateTo, thrN)
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("%s fetching till %v (%d threads)", j.GroupName, ctx.DateTo, thrN)
 	}
 	// NOTE: Non-generic starts here
 	var dirPath string
@@ -358,9 +379,9 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 		dirPath = j.ArchPath + "/" + GroupsioURLRoot + j.GroupName
 		dirPath, err = shared.EnsurePath(dirPath, false)
 		shared.FatalOnError(err)
-		shared.Printf("path to store mailing archives: %s\n", dirPath)
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("path to store mailing archives: %s", dirPath)
 	} else {
-		shared.Printf("processing erchives in memory, archive file not saved\n")
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Info("processing archives in memory, archive file not saved")
 	}
 	// Login to groups.io
 	method := "GET"
@@ -372,7 +393,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	cacheLoginDur := time.Duration(24)*time.Hour + time.Duration(5)*time.Minute
 	var res interface{}
 	var cookies []string
-	shared.Printf("groupsio login via: %s\n", url)
+	j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("groupsio login via: %s", url)
 	res, _, cookies, _, err = shared.Request(
 		ctx,
 		url,
@@ -406,7 +427,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	var result Result
 	err = jsoniter.Unmarshal(res.([]byte), &result)
 	if err != nil {
-		shared.Printf("Cannot unmarshal result from %s\n", string(res.([]byte)))
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Errorf("Cannot unmarshal result from %s", string(res.([]byte)))
 		return
 	}
 	groupID := int64(-1)
@@ -435,7 +456,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 		return
 	}
 	j.GroupID = groupID
-	shared.Printf("%s found group ID %d\n", j.GroupName, j.GroupID)
+	j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("%s found group ID %d\n", j.GroupName, j.GroupID)
 	// We do have cookies now (from either real request or from the L2 cache)
 	//url := GroupsioAPIURL + GroupsioAPILogin + `?email=` + neturl.QueryEscape(j.Email) + `&password=` + neturl.QueryEscape(j.Password)
 	url = GroupsioAPIURL + GroupsioAPIDownloadArchives + `?group_id=` + fmt.Sprintf("%d", groupID)
@@ -458,7 +479,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	} else {
 		to = time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
-	shared.Printf("fetching messages from: %s\n", url)
+	j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("fetching messages from: %s", url)
 	// Groups.io blocks downloading archives more often than 24 hours
 	cacheMsgDur := time.Duration(24)*time.Hour + time.Duration(5)*time.Minute
 	res, status, _, _, err = shared.Request(
@@ -490,9 +511,9 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 		if err != nil {
 			return
 		}
-		shared.Printf("written %s (%d bytes)\n", path, nBytes)
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("written %s (%d bytes)", path, nBytes)
 	} else {
-		shared.Printf("read %d bytes\n", nBytes)
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("read %d bytes", nBytes)
 	}
 	bytesReader := bytes.NewReader(res.([]byte))
 	var zipReader *zip.Reader
@@ -514,12 +535,12 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 		if err != nil {
 			return
 		}
-		shared.Printf("%s uncomressed %d bytes\n", file.Name, len(data))
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("%s uncomressed %d bytes", file.Name, len(data))
 		ary := bytes.Split(data, msgSep)
-		shared.Printf("%s # of messages: %d\n", file.Name, len(ary))
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("%s # of messages: %d", file.Name, len(ary))
 		messages = append(messages, ary...)
 	}
-	shared.Printf("number of messages to parse: %d\n", len(messages))
+	j.log.WithFields(logrus.Fields{"operation": "Sync"}).Infof("number of messages to parse: %d", len(messages))
 	// Process messages (possibly in threads)
 	var (
 		ch         chan error
@@ -616,12 +637,12 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 					}
 				}()
 				if ctx.Debug > 0 {
-					shared.Printf("sending %d items to queue\n", len(allMsgs))
+					j.log.WithFields(logrus.Fields{"operation": "Sync"}).Debugf("sending %d items to queue", len(allMsgs))
 				}
 				ee = j.GroupsioEnrichItems(ctx, thrN, allMsgs, &allDocs, false)
 				// ee = SendToQueue(ctx, j, true, UUID, allMsgs)
 				if ee != nil {
-					shared.Printf("error %v sending %d messages to queue\n", ee, len(allMsgs))
+					j.log.WithFields(logrus.Fields{"operation": "Sync"}).Errorf("error %v sending %d messages to queue", ee, len(allMsgs))
 				}
 				allMsgs = []interface{}{}
 				if allMsgsMtx != nil {
@@ -656,7 +677,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 				)
 				esch, e = processMsg(ch, msg)
 				if e != nil {
-					shared.Printf("process message error: %v\n", e)
+					j.log.WithFields(logrus.Fields{"operation": "Sync"}).Errorf("process message error: %v", e)
 					return
 				}
 				if esch != nil {
@@ -679,7 +700,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 			}
 		}
 		if ctx.Debug > 0 {
-			shared.Printf("joining %d threads\n", nThreads)
+			j.log.WithFields(logrus.Fields{"operation": "Sync"}).Debugf("joining %d threads", nThreads)
 		}
 		for nThreads > 0 {
 			err = <-ch
@@ -697,7 +718,7 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 		}
 	}
 	if ctx.Debug > 0 {
-		shared.Printf("%d wait channels\n", len(escha))
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Debugf("%d wait channels", len(escha))
 	}
 	// NOTE: lock needed
 	if eschaMtx != nil {
@@ -717,30 +738,30 @@ func (j *DSGroupsio) Sync(ctx *shared.Ctx) (err error) {
 	}
 	nMsgs := len(allMsgs)
 	if ctx.Debug > 0 {
-		shared.Printf("%d remaining messages to send to ES\n", nMsgs)
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Debugf("%d remaining messages to send to ES", nMsgs)
 	}
 	// NOTE: for all items, even if 0 - to flush the queue
 	err = j.GroupsioEnrichItems(ctx, thrN, allMsgs, &allDocs, true)
 	//err = SendToQueue(ctx, j, true, UUID, allMsgs)
 	if err != nil {
-		shared.Printf("Error %v sending %d messages to ES\n", err, len(allMsgs))
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Errorf("Error %v sending %d messages to ES", err, len(allMsgs))
 	}
 	if empty > 0 {
-		shared.Printf("%d empty messages\n", empty)
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Warningf("%d empty messages", empty)
 	}
 	if warns > 0 {
-		shared.Printf("%d parse message warnings\n", warns)
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Warningf("%d parse message warnings", warns)
 	}
 	if invalid > 0 {
-		shared.Printf("%d invalid messages\n", invalid)
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Warningf("%d empty messages", empty)
 	}
 	if filtered > 0 {
-		shared.Printf("%d filtered messages (updated before %v or after %v)\n", invalid, from, to)
+		j.log.WithFields(logrus.Fields{"operation": "Sync"}).Warningf("%d filtered messages (updated before %v or after %v)", invalid, from, to)
 	}
 	// NOTE: Non-generic ends here
 	gMaxCreatedAtMtx.Lock()
 	defer gMaxCreatedAtMtx.Unlock()
-	shared.SetLastUpdate(ctx, j.GroupName, gMaxCreatedAt)
+	err = j.cacheProvider.SetLastSync(j.endpoint, gMaxCreatedAt)
 	return
 }
 
@@ -757,7 +778,7 @@ func (j *DSGroupsio) GetItemIdentitiesEx(ctx *shared.Ctx, doc interface{}) (iden
 			ifroms, ok = shared.Dig(doc, []string{"data", lProp}, false, true)
 			if !ok {
 				if ctx.Debug > 1 || lProp == "from" {
-					shared.Printf("cannot get identities: cannot dig %s/%s in %v\n", prop, lProp, doc)
+					j.log.WithFields(logrus.Fields{"operation": "GetItemIdentitiesEx"}).Debugf("cannot get identities: cannot dig %s/%s in %v", prop, lProp, doc)
 				}
 				continue
 			}
@@ -768,7 +789,7 @@ func (j *DSGroupsio) GetItemIdentitiesEx(ctx *shared.Ctx, doc interface{}) (iden
 			// Or can be a string
 			sfroms, ok := ifroms.(string)
 			if !ok {
-				shared.Printf("cannot get identities: cannot read string or interface array from %v\n", ifroms)
+				j.log.WithFields(logrus.Fields{"operation": "GetItemIdentitiesEx"}).Errorf("cannot get identities: cannot read string or interface array from %v", ifroms)
 				continue
 			}
 			froms = []interface{}{sfroms}
@@ -776,13 +797,13 @@ func (j *DSGroupsio) GetItemIdentitiesEx(ctx *shared.Ctx, doc interface{}) (iden
 		for _, ifrom := range froms {
 			from, ok := ifrom.(string)
 			if !ok {
-				shared.Printf("cannot get identities: cannot read string from %v\n", ifrom)
+				j.log.WithFields(logrus.Fields{"operation": "GetItemIdentitiesEx"}).Errorf("cannot get identities: cannot read string from %v", ifrom)
 				continue
 			}
 			emails, ok := shared.ParseAddresses(ctx, from, GroupsioMaxRecipients)
 			if !ok {
 				if ctx.Debug > 1 {
-					shared.Printf("cannot get identities: cannot read email address(es) from %s\n", from)
+					j.log.WithFields(logrus.Fields{"operation": "GetItemIdentitiesEx"}).Debugf("cannot get identities: cannot read email address(es) from %s", from)
 				}
 				continue
 			}
@@ -857,7 +878,7 @@ func (j *DSGroupsio) EnrichItem(ctx *shared.Ctx, item map[string]interface{}, ro
 			}
 		}
 		if !ok && ctx.Debug > 0 {
-			shared.Printf("unable to determine tz for %v/%v/%v\n", msgDate, iMsgDateInTz, iMsgTz)
+			j.log.WithFields(logrus.Fields{"operation": "EnrichItem"}).Debugf("unable to determine tz for %v/%v/%v", msgDate, iMsgDateInTz, iMsgTz)
 		}
 	}
 	// copy RawFields
@@ -1070,11 +1091,11 @@ func (j *DSGroupsio) EnrichItem(ctx *shared.Ctx, item map[string]interface{}, ro
 // items is a current pack of input items
 // docs is a pointer to where extracted identities will be stored
 func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []interface{}, docs *[]interface{}, final bool) (err error) {
-	shared.Printf("input processing(%d/%d/%v)\n", len(items), len(*docs), final)
+	j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Infof("input processing(%d/%d/%v)", len(items), len(*docs), final)
 	outputDocs := func() {
 		if len(*docs) > 0 {
 			// actual output
-			shared.Printf("output processing(%d/%d/%v)\n", len(items), len(*docs), final)
+			j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Debugf("output processing(%d/%d/%v)", len(items), len(*docs), final)
 			var (
 				messageData map[string][]interface{}
 				jsonBytes   []byte
@@ -1089,8 +1110,43 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 					for k, v := range messageData {
 						switch k {
 						case "message_created":
-							ev, _ := v[0].(groupsio.MessageCreatedEvent)
-							err = j.Publisher.PushEvents(ev.Event(), insightsStr, GroupsioDataSource, messageStr, envStr, v)
+							formattedData := make([]interface{}, 0)
+							vals := make([]map[string]interface{}, 0)
+							for _, d := range v {
+								messageID := d.(groupsio.MessageCreatedEvent).Payload.ID
+								isCreated, err := j.cacheProvider.IsKeyCreated(j.endpoint, messageID)
+								if err != nil {
+									j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Errorf("error creating cache for message %s, error %v", messageID, err)
+									continue
+								}
+								if !isCreated {
+									formattedData = append(formattedData, d)
+									b, err := json.Marshal(d)
+									if err != nil {
+										j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Errorf("error marshall data for commit %s, error %v", messageID, err)
+										continue
+									}
+									vals = append(vals, map[string]interface{}{
+										"id":   messageID,
+										"data": b,
+									})
+								}
+							}
+							if len(vals) > 0 {
+								err = j.cacheProvider.Create(j.endpoint, vals)
+								if err != nil {
+									j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Errorf("Error: %+v", err)
+									return
+								}
+							}
+							if len(formattedData) > 0 {
+								ev, _ := v[0].(groupsio.MessageCreatedEvent)
+								err = j.Publisher.PushEvents(ev.Event(), insightsStr, GroupsioDataSource, messageStr, envStr, formattedData)
+								if err != nil {
+									j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Errorf("Error: %+v", err)
+									return
+								}
+							}
 						default:
 							err = fmt.Errorf("unknown event type '%s'", k)
 						}
@@ -1103,16 +1159,19 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 				}
 			}
 			if err != nil {
-				shared.Printf("Error: %+v\n", err)
+				j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Errorf("Error: %+v", err)
 				return
 			}
 			if j.Publisher == nil {
-				shared.Printf("%s\n", string(jsonBytes))
+				j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Errorf("%s", string(jsonBytes))
 			}
 			*docs = []interface{}{}
 			gMaxCreatedAtMtx.Lock()
 			defer gMaxCreatedAtMtx.Unlock()
-			shared.SetLastUpdate(ctx, j.GroupName, gMaxCreatedAt)
+			err = j.cacheProvider.SetLastSync(j.endpoint, gMaxCreatedAt)
+			if err != nil {
+				return
+			}
 		}
 	}
 	if final {
@@ -1122,7 +1181,7 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 	}
 	// NOTE: non-generic code starts
 	if ctx.Debug > 0 {
-		shared.Printf("groupsio enrich items %d/%d func\n", len(items), len(*docs))
+		j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Debugf("groupsio enrich items %d/%d func", len(items), len(*docs))
 	}
 	var (
 		mtx *sync.RWMutex
@@ -1155,7 +1214,7 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 		identities, nRecipients := j.GetItemIdentitiesEx(ctx, doc)
 		if identities == nil || len(identities) == 0 {
 			if ctx.Debug > 1 {
-				shared.Printf("no identities to enrich in %v\n", doc)
+				j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Debugf("no identities to enrich in %v", doc)
 			}
 			return
 		}
@@ -1235,9 +1294,9 @@ func (j *DSGroupsio) GroupsioEnrichItems(ctx *shared.Ctx, thrN int, items []inte
 		}
 		if !authorFound {
 			if ctx.Debug > 1 {
-				shared.Printf("no author found in\n%v\n%v\n", identities, item)
+				j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Debugf("no author found in\n%v\n%v", identities, item)
 			} else if ctx.Debug > 0 {
-				shared.Printf("skipping email due to missing usable from email %v\n", identities)
+				j.log.WithFields(logrus.Fields{"operation": "GroupsioEnrichItems"}).Debugf("skipping email due to missing usable from email %v", identities)
 			}
 			return
 		}
@@ -1332,7 +1391,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map
 	groupID, err = insights.GenerateGroupID(groupURL, source)
 	// shared.Printf("insights.GenerateGroupID(%s,%s) -> %s\n", groupURL, source, messageID)
 	if err != nil {
-		shared.Printf("insights.GenerateGroupID(%s,%s): %+v\n", groupURL, source, err)
+		j.log.WithFields(logrus.Fields{"operation": "GetModelData"}).Errorf("insights.GenerateGroupID(%s,%s): %+v", groupURL, source, err)
 		return
 	}
 	for _, iDoc := range docs {
@@ -1342,7 +1401,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map
 		messageID, err = insights.GenerateEmailMessageID(groupURL, source, sourceMessageID)
 		// shared.Printf("insights.GenerateEmailMessageID(%s,%s,%s) -> %s\n", groupURL, source, sourceMessageID, messageID)
 		if err != nil {
-			shared.Printf("insights.GenerateEmailMessageID(%s,%s,%s): %+v for %+v\n", groupURL, source, sourceMessageID, err, doc)
+			j.log.WithFields(logrus.Fields{"operation": "GetModelData"}).Errorf("insights.GenerateEmailMessageID(%s,%s,%s): %+v for %+v", groupURL, source, sourceMessageID, err, doc)
 			return
 		}
 		parentSourceMessageID, ok := doc["parent_message_id"].(string)
@@ -1352,7 +1411,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map
 			parentMessageID, err = insights.GenerateEmailMessageID(groupURL, source, parentSourceMessageID)
 			// shared.Printf("insights.GenerateEmailMessageID(%s,%s,%s) -> %s (parent)\n", groupURL, source, parentSourceMessageID, parentMessageID)
 			if err != nil {
-				shared.Printf("insights.GenerateEmailMessageID(%s,%s,%s): %+v for %+v (parent)\n", groupURL, source, parentSourceMessageID, err, doc)
+				j.log.WithFields(logrus.Fields{"operation": "GetModelData"}).Errorf("insights.GenerateEmailMessageID(%s,%s,%s): %+v for %+v (parent)", groupURL, source, parentSourceMessageID, err, doc)
 				return
 			}
 		}
@@ -1382,7 +1441,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map
 		// name, username = shared.PostprocessNameUsername(name, username, email)
 		userID, err = user.GenerateIdentity(&source, &email, &name, &username)
 		if err != nil {
-			shared.Printf("GenerateIdentity(%s,%s,%s,%s): %+v for %+v\n", source, email, name, username, err, doc)
+			j.log.WithFields(logrus.Fields{"operation": "GetModelData"}).Errorf("GenerateIdentity(%s,%s,%s,%s): %+v for %+v", source, email, name, username, err, doc)
 			return
 		}
 		contributor := insights.Contributor{
@@ -1410,7 +1469,7 @@ func (j *DSGroupsio) GetModelData(ctx *shared.Ctx, docs []interface{}) (data map
 				// name, username = shared.PostprocessNameUsername(name, username, email)
 				userID, err = user.GenerateIdentity(&source, &email, &name, &username)
 				if err != nil {
-					shared.Printf("GenerateIdentity(%s,%s,%s,%s): %+v for %+v\n", source, email, name, username, err, doc)
+					j.log.WithFields(logrus.Fields{"operation": "GetModelData"}).Errorf("GenerateIdentity(%s,%s,%s,%s): %+v for %+v", source, email, name, username, err, doc)
 					return
 				}
 				contributor := insights.Contributor{
@@ -1467,21 +1526,56 @@ func main() {
 		ctx      shared.Ctx
 		groupsio DSGroupsio
 	)
+	groupsio.initStructuredLogger()
 	err := groupsio.Init(&ctx)
 	if err != nil {
-		shared.Printf("Error: %+v\n", err)
+		groupsio.log.WithFields(logrus.Fields{"operation": "main"}).Errorf("Error: %+v", err)
 		return
 	}
 	timestamp := time.Now()
 	shared.SetSyncMode(true, false)
 	shared.SetLogLoggerError(false)
 	shared.AddLogger(&groupsio.Logger, GroupsioDataSource, logger.Internal, []map[string]string{{"GROUPSIO_GROUP_NAME": groupsio.GroupName, "ProjectSlug": ctx.Project}})
-	groupsio.WriteLog(&ctx, timestamp, logger.InProgress, "message")
+	groupsio.AddCacheProvider()
+	err = groupsio.WriteLog(&ctx, timestamp, logger.InProgress, "message")
+	if err != nil {
+		groupsio.log.WithFields(logrus.Fields{"operation": "main"}).Errorf("WriteLog Error : %+v", err)
+	}
 	err = groupsio.Sync(&ctx)
 	if err != nil {
-		shared.Printf("Error: %+v\n", err)
-		groupsio.WriteLog(&ctx, timestamp, logger.Failed, "message: "+err.Error())
-		return
+		groupsio.log.WithFields(logrus.Fields{"operation": "main"}).Errorf("Error: %+v", err)
+		er := groupsio.WriteLog(&ctx, timestamp, logger.Failed, err.Error())
+		if er != nil {
+			groupsio.log.WithFields(logrus.Fields{"operation": "main"}).Errorf("WriteLog Error : %+v", err)
+			shared.FatalOnError(er)
+		}
 	}
-	groupsio.WriteLog(&ctx, timestamp, logger.Done, "message")
+	shared.FatalOnError(err)
+
+	err = groupsio.WriteLog(&ctx, timestamp, logger.Done, "message")
+	if err != nil {
+		groupsio.log.WithFields(logrus.Fields{"operation": "main"}).Errorf("WriteLog Error : %+v", err)
+	}
+	shared.FatalOnError(err)
+}
+
+// createStructuredLogger...
+func (j *DSGroupsio) initStructuredLogger() {
+	logrus.SetFormatter(&logrus.JSONFormatter{})
+	log := logrus.WithFields(
+		logrus.Fields{
+			"environment": os.Getenv("STAGE"),
+			"commit":      build.GitCommit,
+			"version":     build.Version,
+			"service":     build.AppName,
+			"endpoint":    fmt.Sprintf("%d-%s", j.GroupID, j.GroupName),
+		})
+	j.log = log
+}
+
+// AddCacheProvider - adds cache provider
+func (j *DSGroupsio) AddCacheProvider() {
+	cacheProvider := cache.NewManager(GroupsIO, os.Getenv("STAGE"))
+	j.cacheProvider = *cacheProvider
+	j.endpoint = fmt.Sprintf("%d-%s", j.GroupID, j.GroupName)
 }
