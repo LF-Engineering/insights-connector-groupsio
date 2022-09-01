@@ -94,7 +94,7 @@ workflows:
             - build
           filters:
             branches:
-              only: enhance-logging-and-caching #main
+              only: main
             tags:
               ignore: /.*/
       - approve_prod:
