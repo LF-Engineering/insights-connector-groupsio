@@ -23,6 +23,7 @@ vendor/
 # Others
 out
 xxx
+.idea
 
 # golang output binary directory
 bin
